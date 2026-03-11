@@ -1,3 +1,12 @@
+<div align="center">
+
+**Automated test coverage for any JS/TS project. Fire and forget.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node >= 18](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
+[![npm version](https://img.shields.io/npm/v/@dagim_s/sheriff)](https://www.npmjs.com/package/@dagim_s/sheriff)
+[![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-blueviolet)](https://docs.anthropic.com/claude-code)
+
 ```
   ███████╗██╗  ██╗███████╗██████╗ ██╗███████╗███████╗
   ██╔════╝██║  ██║██╔════╝██╔══██╗██║██╔════╝██╔════╝
@@ -7,14 +16,9 @@
   ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚═╝     ╚═╝
 ```
 
-<div align="center">
-
-**Automated test coverage for any JS/TS project. Fire and forget.**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 18](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
-[![npm version](https://img.shields.io/npm/v/@dagim_s/sheriff)](https://www.npmjs.com/package/@dagim_s/sheriff)
-[![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-blueviolet)](https://docs.anthropic.com/claude-code)
+```bash
+npx @dagim_s/sheriff
+```
 
 </div>
 
