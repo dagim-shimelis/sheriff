@@ -7,6 +7,8 @@
 [![npm version](https://img.shields.io/npm/v/@dagim_s/sheriff)](https://www.npmjs.com/package/@dagim_s/sheriff)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-blueviolet)](https://docs.anthropic.com/claude-code)
 
+</div>
+
 ```
   ███████╗██╗  ██╗███████╗██████╗ ██╗███████╗███████╗
   ██╔════╝██║  ██║██╔════╝██╔══██╗██║██╔════╝██╔════╝
@@ -15,6 +17,8 @@
   ███████║██║  ██║███████╗██║  ██║██║██║     ██║
   ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚═╝     ╚═╝
 ```
+
+<div align="center">
 
 ```bash
 npx @dagim_s/sheriff
