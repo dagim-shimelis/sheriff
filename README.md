@@ -10,7 +10,7 @@
 </div>
 
 <div align="center">
-  <img src="assets/banner.png" alt="Sheriff" width="600">
+  <img src="https://res.cloudinary.com/drhjbn19m/image/upload/v1773264369/packages/banner_yka1qn.png" alt="Sheriff" width="600">
 </div>
 
 <div align="center">
