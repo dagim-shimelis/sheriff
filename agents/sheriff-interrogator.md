@@ -64,22 +64,26 @@ Sheriff detected the following about your project:
 
 A few quick questions:
 
-1. Phase strategy — how should Sheriff prioritize what to test first?
+1. Would you like Sheriff to generate unit tests? (Y/n) [default: yes]
+
+2. Would you like Sheriff to generate end-to-end tests? (Y/n) [default: yes]
+
+3. Phase strategy — how should Sheriff prioritize what to test first?
    a) By risk (auth, billing, permissions first) ← recommended
    b) By domain (stores, then composables, then components)
    c) By complexity (simple pure functions first)
 
-2. When a test reveals a real bug in your source code, what should Sheriff do?
+4. When a test reveals a real bug in your source code, what should Sheriff do?
    a) Flag it for you to review ← recommended
    b) Fix the source code automatically
    c) Fix the code and notify you
 
-3. How many parallel agents should run at once? (1–5, default: 3)
+5. How many parallel agents should run at once? (1–5, default: 3)
 
-4. Any directories or files to exclude beyond node_modules/dist?
+6. Any directories or files to exclude beyond node_modules/dist?
    (Press enter to skip)
 
-5. Model assignment — which models should Sheriff use for each task tier?
+7. Model assignment — which models should Sheriff use for each task tier?
    Each tier can be: haiku, sonnet, or opus.
 
    a) Light tasks (file scanning, report assembly):    [default: haiku]
@@ -91,6 +95,13 @@ A few quick questions:
 
 Do NOT ask about anything you detected with high confidence.
 If the test runner is completely undetectable, say so clearly — this is the only hard blocker.
+
+**Test type rules:**
+- Questions 1 and 2 (unit tests and e2e tests) must always be asked — they are not auto-detectable.
+- Default for both is `yes`. The user can decline by answering "n" or "no".
+- If the user declines both, warn them: "Sheriff needs at least one test type enabled. Please enable unit tests, e2e tests, or both."
+- Store the answers in the config as `testTypes: { unit: true/false, e2e: true/false }`.
+- All downstream agents (discovery, planner, executor) will respect these flags and skip disabled test types entirely.
 
 ## Step 4 — Initialize project
 
@@ -114,7 +125,8 @@ Run /sheriff:run to start the discovery and test generation process.
 
 <success_criteria>
 - .sheriff/.sheriff.json exists and is valid JSON
-- All required fields are populated: testRunner, framework, language, sourceDirs, excludeDirs, phaseStrategy, onTestFailure, maxParallelAgents, models
+- All required fields are populated: testRunner, framework, language, sourceDirs, excludeDirs, phaseStrategy, onTestFailure, maxParallelAgents, models, testTypes
+- testTypes object contains `unit` (boolean) and `e2e` (boolean) — at least one must be true
 - The user was asked the minimum number of questions necessary
 - If testRunner could not be detected, the user was informed clearly
 </success_criteria>

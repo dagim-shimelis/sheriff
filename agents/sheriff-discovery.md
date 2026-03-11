@@ -23,6 +23,7 @@ Read .sheriff/.sheriff.json to get:
 - excludePatterns
 - testRunner
 - language
+- testTypes (which test types are enabled: `unit`, `e2e`)
 
 ## Step 2 — Scan source files
 
@@ -44,10 +45,14 @@ Build a map of: tested source file → test file path.
 ## Step 4 — Cross-reference coverage gaps
 
 For every source file, determine:
-- Unit test: ✅ exists | [ ] missing | — not applicable
-- E2E test: ✅ exists | [ ] missing | — not applicable
+- Unit test: ✅ exists | [ ] missing | — not applicable | ⊘ disabled
+- E2E test: ✅ exists | [ ] missing | — not applicable | ⊘ disabled
 
-Rules for "not applicable":
+**Respect testTypes config:**
+- If `testTypes.unit` is `false`, mark ALL unit test columns as `⊘ disabled` — do not flag any unit test gaps.
+- If `testTypes.e2e` is `false`, mark ALL e2e test columns as `⊘ disabled` — do not flag any e2e test gaps.
+
+Rules for "not applicable" (only applies when the test type is enabled):
 - E2E: config files, pure utilities, type definitions
 - Unit: pure routing config, static assets
 
@@ -85,6 +90,8 @@ Project: {framework} / {testRunner} / {language}
 ## Summary
 
 - Total source files: {N}
+- Unit tests enabled: {yes/no}
+- E2E tests enabled: {yes/no}
 - Already tested (unit): {N}
 - Already tested (E2E): {N}
 - Needs unit tests: {N}

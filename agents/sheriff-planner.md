@@ -17,7 +17,12 @@ Your output drives everything downstream. Executors claim sub-phases from your p
 
 Read:
 - .sheriff/TEST_MAP.md
-- .sheriff/.sheriff.json (for phaseStrategy and maxParallelAgents)
+- .sheriff/.sheriff.json (for phaseStrategy, maxParallelAgents, and testTypes)
+
+**Respect testTypes config:**
+- If `testTypes.unit` is `false`, do NOT create any sub-phases for unit tests.
+- If `testTypes.e2e` is `false`, do NOT create any sub-phases for e2e tests.
+- Only plan work for enabled test types. Skip any TEST_MAP entries marked `⊘ disabled`.
 
 ## Step 2 — Group by phase strategy
 
