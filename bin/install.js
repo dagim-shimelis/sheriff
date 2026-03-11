@@ -63,10 +63,10 @@ function getClaudeDirs() {
   };
 }
 
-function install(claudeDir) {
+function install(claudeDir, { skipBanner = false } = {}) {
   const target = path.join(claudeDir, SHERIFF_DIR_NAME);
 
-  if (!isSilent) printBanner(VERSION);
+  if (!isSilent && !skipBanner) printBanner(VERSION);
   log(`  Installing to ${claudeDir}/`);
   log('');
 
@@ -128,9 +128,11 @@ function install(claudeDir) {
   // 6. Inject hook config into settings.json
   injectHookConfig(claudeDir);
 
-  const { GOLD, RESET, GRAY } = require('../sheriff/bin/lib/banner');
+  const { GOLD, RESET, GRAY, GREEN } = require('../sheriff/bin/lib/banner');
   log('');
-  log(`  ${GOLD}Done!${RESET} Run ${GOLD}/sheriff:run${RESET} to get started.`);
+  log(`  ${GOLD}Done!${RESET}`);
+  log('');
+  log(`  Run ${GOLD}/sheriff:run${RESET} inside Claude Code to get started.`);
   log('');
 }
 
@@ -247,15 +249,26 @@ async function main() {
 
   if (isGlobal) {
     targetDir = dirs.global;
+    install(targetDir);
   } else if (isLocal) {
     targetDir = dirs.local;
+    install(targetDir);
   } else {
     if (!isSilent) printBanner(VERSION);
-    const answer = await prompt('Install (g)lobally (~/.claude) or (l)ocally (./.claude)? [g/l, default: g]: ');
-    targetDir = answer.toLowerCase() === 'l' ? dirs.local : dirs.global;
-  }
 
-  install(targetDir);
+    const { GOLD, RESET, GRAY } = require('../sheriff/bin/lib/banner');
+    log(`  Where would you like to install Sheriff?`);
+    log('');
+    log(`    ${GOLD}g)${RESET} Global  ${GRAY}~/.claude/ — available in all projects${RESET}`);
+    log(`    ${GOLD}l)${RESET} Local   ${GRAY}./.claude/ — scoped to this project only${RESET}`);
+    log('');
+
+    const answer = await prompt('  Your choice [g/l, default: g]: ');
+    log('');
+    targetDir = answer.toLowerCase() === 'l' ? dirs.local : dirs.global;
+
+    install(targetDir, { skipBanner: true });
+  }
 }
 
 main().catch((e) => {

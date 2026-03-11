@@ -2,6 +2,7 @@
 
 // ANSI color codes
 const GOLD = '\x1b[1;33m';              // bold yellow
+const GREEN = '\x1b[1;32m';             // bold green
 const DIM = '\x1b[33m';                 // yellow (non-bold) for version
 const WHITE = '\x1b[37m';
 const GRAY = '\x1b[90m';
@@ -34,4 +35,4 @@ function printCompact() {
   console.log(`${GOLD}${BOLD}  SHERIFF${RESET} ${GRAY}— automated test coverage${RESET}`);
 }
 
-module.exports = { printBanner, printCompact, GOLD, DIM, WHITE, GRAY, RESET, BOLD };
+module.exports = { printBanner, printCompact, GOLD, GREEN, DIM, WHITE, GRAY, RESET, BOLD };
