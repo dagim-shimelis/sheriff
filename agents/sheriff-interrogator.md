@@ -13,6 +13,16 @@ You detect what you can, ask only what you cannot infer, and never block on opti
 
 <execution_flow>
 
+## Step 0 — Show banner
+
+Before anything else, print the Sheriff banner so the user sees branding immediately:
+
+```bash
+node {SHERIFF_TOOLS} print-banner
+```
+
+This must be the very first thing the user sees.
+
 ## Step 1 — Auto-detect project setup
 
 Run these in parallel. Do NOT ask the user for anything yet.

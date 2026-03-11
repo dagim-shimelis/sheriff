@@ -17,7 +17,19 @@ node {SHERIFF_TOOLS} config-exists
 ```
 
 If exit code 1 (.sheriff.json missing):
-- Spawn the interrogator agent first
+- Spawn the interrogator agent first:
+
+```
+Task(
+  subagent_type="sheriff-interrogator",
+  model="inherit",
+  prompt="
+    Run onboarding for a new Sheriff project.
+    Sheriff tools: {SHERIFF_TOOLS}
+  "
+)
+```
+
 - Wait for completion before continuing
 
 ```bash

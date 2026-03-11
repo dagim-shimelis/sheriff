@@ -26,6 +26,7 @@
  *   read-config                   Print current .sheriff.json
  *   write-config                  Read config JSON from stdin and write
  *   config-exists                 Exit 0 if .sheriff.json exists, 1 otherwise
+ *   print-banner                  Print the Sheriff ASCII banner with version
  */
 
 const path = require('path');
@@ -36,6 +37,7 @@ const state = require('./lib/state');
 const phases = require('./lib/phases');
 const git = require('./lib/git');
 const results = require('./lib/results');
+const { printBanner } = require('./lib/banner');
 
 const args = process.argv.slice(2);
 const rawIndex = args.indexOf('--raw');
@@ -232,6 +234,12 @@ switch (command) {
 
   case 'config-exists': {
     process.exit(config.configExists(cwd) ? 0 : 1);
+  }
+
+  case 'print-banner': {
+    const version = require('../../package.json').version;
+    printBanner(version);
+    break;
   }
 
   default:

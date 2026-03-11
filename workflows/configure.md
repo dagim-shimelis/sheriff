@@ -5,9 +5,15 @@ Used when the user wants to update their project config.
 
 ## Steps
 
-1. Read current .sheriff.json if it exists — show the user what's currently set.
+1. Print the Sheriff banner:
 
-2. Spawn the interrogator agent with a `reconfigure: true` flag so it knows
+```bash
+node {SHERIFF_TOOLS} print-banner
+```
+
+2. Read current .sheriff.json if it exists — show the user what's currently set.
+
+3. Spawn the interrogator agent with a `reconfigure: true` flag so it knows
    to ask about all settings, not just missing ones:
 
 ```
@@ -29,7 +35,7 @@ Task(
 )
 ```
 
-3. After interrogator completes, print:
+4. After interrogator completes, print:
 
 ```
 ✅ Configuration updated.
