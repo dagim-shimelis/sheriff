@@ -1,6 +1,6 @@
 {
   "name": "@dagim_s/sheriff",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Automated test coverage mapping and generation for any JS/TS project. Fire and forget.",
   "keywords": ["testing", "coverage", "claude-code", "ai", "automation"],
   "license": "MIT",
