@@ -15,8 +15,11 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 
+const { printBanner } = require('../sheriff/bin/lib/banner');
+
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const SHERIFF_DIR_NAME = 'sheriff';
+const VERSION = require('../package.json').version;
 
 const args = process.argv.slice(2);
 const isGlobal = args.includes('--global');
@@ -63,8 +66,8 @@ function getClaudeDirs() {
 function install(claudeDir) {
   const target = path.join(claudeDir, SHERIFF_DIR_NAME);
 
-  log('');
-  log(`Installing @dagim_s/sheriff to ${claudeDir}/`);
+  if (!isSilent) printBanner(VERSION);
+  log(`  Installing to ${claudeDir}/`);
   log('');
 
   // 1. Copy commands
@@ -125,12 +128,9 @@ function install(claudeDir) {
   // 6. Inject hook config into settings.json
   injectHookConfig(claudeDir);
 
+  const { GOLD, RESET, GRAY } = require('../sheriff/bin/lib/banner');
   log('');
-  log('✅ Sheriff installed successfully!');
-  log('');
-  log('Next steps:');
-  log('  1. Open a project in Claude Code');
-  log('  2. Run /sheriff:run to start');
+  log(`  ${GOLD}Done!${RESET} Run ${GOLD}/sheriff:run${RESET} to get started.`);
   log('');
 }
 
@@ -250,9 +250,7 @@ async function main() {
   } else if (isLocal) {
     targetDir = dirs.local;
   } else {
-    log('');
-    log('📦  @dagim_s/sheriff — Automated test coverage for any JS/TS project');
-    log('');
+    if (!isSilent) printBanner(VERSION);
     const answer = await prompt('Install (g)lobally (~/.claude) or (l)ocally (./.claude)? [g/l, default: g]: ');
     targetDir = answer.toLowerCase() === 'l' ? dirs.local : dirs.global;
   }
