@@ -132,7 +132,7 @@ function install(claudeDir, { skipBanner = false } = {}) {
   log('');
   log(`  ${GOLD}Done!${RESET}`);
   log('');
-  log(`  Run ${GOLD}/sheriff:run${RESET} inside Claude Code to get started.`);
+  log(`  Run ${GOLD}/sheriff:help${RESET} inside Claude Code to get started.`);
   log('');
 }
 
