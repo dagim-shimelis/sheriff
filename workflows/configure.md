@@ -1,0 +1,42 @@
+# Sheriff — Configure Workflow
+
+Re-runs the interrogator regardless of whether .sheriff.json already exists.
+Used when the user wants to update their project config.
+
+## Steps
+
+1. Read current .sheriff.json if it exists — show the user what's currently set.
+
+2. Spawn the interrogator agent with a `reconfigure: true` flag so it knows
+   to ask about all settings, not just missing ones:
+
+```
+Task(
+  subagent_type="sheriff-interrogator",
+  model="inherit",
+  prompt="
+    Re-run onboarding for an existing Sheriff project.
+    The user wants to update their configuration.
+
+    Current config:
+    {currentConfigJSON}
+
+    Show the user what is currently set, then ask if they want to change each setting.
+    Write the updated config to .sheriff/.sheriff.json when done.
+
+    Sheriff tools: {SHERIFF_TOOLS}
+  "
+)
+```
+
+3. After interrogator completes, print:
+
+```
+✅ Configuration updated.
+
+Note: if you change phaseStrategy or sourceDirs, you should reset and re-run
+discovery to regenerate TEST_MAP.md:
+
+  /sheriff:reset --discovery-only
+  /sheriff:run
+```

@@ -1,0 +1,78 @@
+/**
+ * sheriff-statusline — Statusline hook
+ *
+ * Renders a compact status bar showing Sheriff progress and context usage.
+ * Also writes context metrics to the bridge file for sheriff-context-monitor.
+ *
+ * Output format (statusline):
+ *   🔫 Sheriff  Phase 2/5  ████████░░  3 running  12✅ 2⚠️
+ */
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const hookData = JSON.parse(process.env.HOOK_DATA || '{}');
+const sessionId = hookData.session_id || 'unknown';
+const bridgeFile = path.join(os.tmpdir(), `sheriff-ctx-${sessionId}.json`);
+
+// Context window metrics from hook data
+const contextTokensUsed = hookData.context_tokens_used || 0;
+const contextTokensMax = hookData.context_tokens_max || 200000;
+const remainingPercent = Math.round(((contextTokensMax - contextTokensUsed) / contextTokensMax) * 100);
+const usedPercent = 100 - remainingPercent;
+
+// Write bridge file for context monitor
+try {
+  fs.writeFileSync(bridgeFile, JSON.stringify({
+    remainingPercent,
+    usedPercent,
+    contextTokensUsed,
+    contextTokensMax,
+    timestamp: Date.now(),
+  }));
+} catch {}
+
+// Read Sheriff status
+const sheriffDir = path.join(process.cwd(), '.sheriff');
+if (!fs.existsSync(sheriffDir)) {
+  // Not a Sheriff project — show nothing
+  process.exit(0);
+}
+
+let statusLine = '🔫 Sheriff';
+
+try {
+  const phasesFile = path.join(sheriffDir, 'PHASES.md');
+  if (fs.existsSync(phasesFile)) {
+    const content = fs.readFileSync(phasesFile, 'utf8');
+
+    // Count statuses
+    const passing = (content.match(/✅/g) || []).length;
+    const review = (content.match(/⚠️/g) || []).length;
+    const running = (content.match(/🔒/g) || []).length;
+    const failed = (content.match(/❌/g) || []).length;
+
+    // Current phase
+    const phaseMatch = content.match(/## Phase (\d+)/g);
+    const totalPhases = phaseMatch ? phaseMatch.length : 0;
+    const donePhases = (content.match(/\| Phase \d+[^|]*\| ✅/g) || []).length;
+
+    // Context bar (10 chars)
+    const filled = Math.round(usedPercent / 10);
+    const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+
+    const parts = [`🔫 Sheriff`];
+    if (totalPhases > 0) parts.push(`Phase ${donePhases + 1}/${totalPhases}`);
+    parts.push(`ctx ${bar} ${remainingPercent}%`);
+    if (running > 0) parts.push(`${running} running`);
+    if (passing > 0) parts.push(`${passing}✅`);
+    if (review > 0) parts.push(`${review}⚠️`);
+    if (failed > 0) parts.push(`${failed}❌`);
+
+    statusLine = parts.join('  ');
+  }
+} catch {}
+
+console.log(statusLine);
+process.exit(0);

@@ -1,0 +1,33 @@
+{
+  "name": "@dagim_s/sheriff",
+  "version": "0.1.0",
+  "description": "Automated test coverage mapping and generation for any JS/TS project. Fire and forget.",
+  "keywords": ["testing", "coverage", "claude-code", "ai", "automation"],
+  "license": "MIT",
+  "author": "dagim_s",
+  "bin": {
+    "sheriff": "./bin/install.js"
+  },
+  "scripts": {
+    "build:hooks": "node scripts/build-hooks.js",
+    "prepublishOnly": "npm run build:hooks"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.2",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "commands/",
+    "agents/",
+    "hooks/dist/",
+    "sheriff/",
+    "scripts/"
+  ]
+}
