@@ -26,7 +26,7 @@ Sheriff is a Claude Code plugin that **automatically discovers, plans, writes, f
 
 Point it at your codebase, run one command, and walk away. Sheriff interrogates your project structure, finds every untested file and function, groups work into risk-ordered phases, dispatches parallel executor agents to write real tests against your actual framework, auto-fixes failures (up to 3 attempts per suite), and commits everything with a structured summary. No test templates, no manual configuration, no babysitting — just coverage where there was none.
 
-Sheriff is built on Claude Code's multi-agent plugin system. It installs as a first-class plugin with slash commands, sub-agents, and lifecycle hooks. It works with whatever test runner and framework your project already uses.
+Sheriff is built on Claude Code's multi-agent plugin system. It installs as a first-class plugin with slash commands, sub-agents, and lifecycle hooks. It works with whatever test runner and framework your project already uses — or sets one up for you if you don't have one yet.
 
 ---
 
@@ -61,15 +61,15 @@ Open Claude Code in your project, then run:
 
 **Step 3 — That's it.**
 
-Sheriff handles everything from here. It onboards itself to your project, scans your source tree, plans a phased test strategy, writes and runs the tests, fixes failures, and commits results — all autonomously.
+Sheriff handles everything from here. It onboards itself to your project, sets up test runners if needed, scans your source tree, plans a phased test strategy, writes and runs the tests, fixes failures, and commits results — all autonomously.
 
-> Sheriff installs as a Claude Code plugin, giving it access to slash commands (`/sheriff:run`, `/sheriff:status`, `/sheriff:reset`), dedicated sub-agents for each stage of the pipeline, and lifecycle hooks that coordinate the multi-agent workflow.
+> Sheriff installs as a Claude Code plugin, giving it access to slash commands (`/sheriff:run`, `/sheriff:status`, `/sheriff:configure`, `/sheriff:reset`, `/sheriff:update`), dedicated sub-agents for each stage of the pipeline, and lifecycle hooks that coordinate the multi-agent workflow.
 
 ---
 
 ## How It Works
 
-Sheriff runs a six-stage pipeline. Each stage is handled by a dedicated agent. Stages run sequentially at the top level; within Stage C, executor agents run in parallel across sub-phases.
+Sheriff runs a seven-stage pipeline. Each stage is handled by a dedicated agent. Stages run sequentially at the top level; within Stage C, executor agents run in parallel across sub-phases.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -81,10 +81,12 @@ Sheriff runs a six-stage pipeline. Each stage is handled by a dedicated agent. S
           │  STAGE 0 · Bootstrap                   │
           │  sheriff-interrogator                  │
           │                                        │
-          │  • Detects framework, test runner,     │
+          │  • Detects framework, language,         │
           │    package manager, tsconfig           │
+          │  • Asks: unit tests? E2E tests?        │
+          │  • Recommends & configures runners     │
+          │  • Validates setup with dummy test     │
           │  • Writes .sheriff.json config         │
-          │  • Confirms scope with user            │
           └──────────────────┬─────────────────────┘
                              │
                              ▼
@@ -95,6 +97,7 @@ Sheriff runs a six-stage pipeline. Each stage is handled by a dedicated agent. S
           │  • Scans every source file             │
           │  • Identifies existing test coverage   │
           │  • Flags untested files & functions    │
+          │  • Respects testTypes config           │
           │  • Writes TEST_MAP.md                  │
           └──────────────────┬─────────────────────┘
                              │
@@ -104,6 +107,7 @@ Sheriff runs a six-stage pipeline. Each stage is handled by a dedicated agent. S
           │  sheriff-planner                       │
           │                                        │
           │  • Groups by risk, domain, complexity  │
+          │  • Plans only enabled test types       │
           │  • Assigns files to ordered waves      │
           │  • Writes PHASES.md                    │
           └──────────────────┬─────────────────────┘
@@ -115,7 +119,7 @@ Sheriff runs a six-stage pipeline. Each stage is handled by a dedicated agent. S
           │                                        │
           │  For each sub-phase:                   │
           │  • Claims sub-phase (lock file)        │
-          │  • Writes tests for assigned files     │
+          │  • Writes tests using correct runner   │
           │  • Runs test suite                     │
           │  • Fixes failures (up to 3 attempts)   │
           │  • Commits passing tests               │
@@ -142,16 +146,79 @@ Sheriff runs a six-stage pipeline. Each stage is handled by a dedicated agent. S
 
 ---
 
+## Test Runner Setup
+
+Sheriff can work with **any test runner** — and will set one up for you if your project doesn't have one yet.
+
+### How detection works
+
+During onboarding, Sheriff scans your `package.json` and config files to detect installed runners:
+
+- **Unit runners**: Vitest, Jest, Mocha, Jasmine
+- **E2E runners**: Playwright, Cypress, Nightwatch, Puppeteer
+
+If a runner is found in `devDependencies` with a matching config file (e.g., `vitest.config.js`), it's used automatically.
+
+### If no runner is detected
+
+Sheriff asks you to choose one, with framework-aware recommendations:
+
+```
+Which unit test runner would you like to use?
+
+  a) Vitest  ← recommended for your stack
+  b) Jest
+  c) Mocha
+  d) Other (specify)
+```
+
+| Your framework | Unit recommendation | E2E recommendation |
+|---------------|--------------------|--------------------|
+| Vue / Nuxt | Vitest | Playwright |
+| React / Next | Vitest | Playwright |
+| Svelte / SvelteKit | Vitest | Playwright |
+| Express / Fastify / NestJS | Vitest | Playwright |
+| Unknown | Vitest | Playwright |
+
+The "Other" option lets you type any npm package name. Sheriff validates it exists on npm before proceeding.
+
+### Automatic setup
+
+Once you pick a runner, Sheriff handles the rest:
+
+1. **Git checkpoint** — creates a commit so you can roll back if needed
+2. **Install** — installs the runner and companion packages via your project's package manager (pnpm, yarn, npm, or bun — auto-detected from lockfile)
+3. **Configure** — generates a minimal, functional config file tailored to your framework
+4. **Validate** — writes a dummy test and runs it to confirm the setup works (up to 3 retry attempts with different strategies)
+5. **Commit** — commits the setup changes
+
+If validation fails after 3 attempts, Sheriff stops and asks you to configure the runner manually before continuing.
+
+### Companion packages
+
+Sheriff installs the right companion packages for your stack:
+
+| Runner + Framework | Packages installed |
+|---|---|
+| Vitest + Vue | `vitest`, `@vue/test-utils`, `jsdom` |
+| Vitest + React | `vitest`, `@testing-library/react`, `jsdom` |
+| Vitest + Node | `vitest` |
+| Jest + TypeScript | `jest`, `ts-jest` or `@swc/jest` |
+| Playwright | `@playwright/test` + Chromium browser |
+| Cypress | `cypress` |
+
+---
+
 ## The Agent Architecture
 
 Sheriff is composed of five specialized agents. Each agent has a defined role, a color-coded identity in logs, and a model profile matched to its computational demands.
 
 | Agent | Role | Produces | Model Tier |
 |---|---|---|---|
-| `sheriff-interrogator` | Onboards to the project — detects framework, test runner, package manager, tsconfig, and confirms scope with the user | `.sheriff.json` | Medium (default: Sonnet) |
-| `sheriff-discovery` | Scans all source files against existing tests, flags every untested file and function, builds the full coverage gap map | `TEST_MAP.md` | Light (default: Haiku) |
-| `sheriff-planner` | Reads the gap map, groups work by risk/domain/complexity, assigns files to ordered waves, produces the phased execution plan | `PHASES.md` | Medium (default: Sonnet) |
-| `sheriff-executor` | Claims a sub-phase, writes tests for its assigned files, runs the suite, auto-fixes failures (up to 3 rounds), commits passing tests — the primary workhorse | per-phase commit | Heavy (default: Opus) |
+| `sheriff-interrogator` | Onboards to the project — detects framework, recommends and configures test runners, validates setup, confirms scope with the user | `.sheriff.json` | Medium (default: Sonnet) |
+| `sheriff-discovery` | Scans all source files against existing tests, flags every untested file and function, respects test type settings, builds the full coverage gap map | `TEST_MAP.md` | Light (default: Haiku) |
+| `sheriff-planner` | Reads the gap map, groups work by risk/domain/complexity, plans only enabled test types, assigns files to ordered waves, produces the phased execution plan | `PHASES.md` | Medium (default: Sonnet) |
+| `sheriff-executor` | Claims a sub-phase, writes tests using the correct runner (unit or E2E), runs the suite, auto-fixes failures (up to 3 rounds), commits passing tests — the primary workhorse | per-phase commit | Heavy (default: Opus) |
 | `sheriff-reporter` | Collects results from all executor runs, assembles structured phase summaries, calculates coverage delta | phase summary reports | Light (default: Haiku) |
 
 ### Model Profiles
@@ -182,13 +249,15 @@ Want to run everything on Opus for maximum quality? Set all three tiers to `"opu
 
 ## Commands
 
-Sheriff exposes four slash commands inside Claude Code. All commands are available globally after a global install, or project-scoped after a local install.
+Sheriff exposes five slash commands inside Claude Code. All commands are available globally after a global install, or project-scoped after a local install.
 
 ---
 
 ### `/sheriff:run`
 
-Run or resume the full Sheriff pipeline. If Sheriff has not been configured yet, it will run onboarding first. If a prior run was interrupted, it resumes from the last incomplete phase.
+Run or resume the full Sheriff pipeline. If Sheriff has not been configured yet, it will run onboarding first (including test runner setup). If a prior run was interrupted, it resumes from the last incomplete phase.
+
+On every run, Sheriff checks for available updates and shows a non-blocking notice if a newer version exists.
 
 ```
 /sheriff:run
@@ -226,7 +295,7 @@ Show a summary of the current run: phases complete, tests passing, items flagged
 
 **Output includes:**
 
-- Phase progress table (from `PHASES.md`)
+- Phase progress table with test counts per phase
 - Sub-phases marked `⚠️ needs review` — listed with their notes
 - Sub-phases marked `❌ fail` — listed for follow-up
 - Overall counts: total tests written, passing, skipped, failed
@@ -239,7 +308,7 @@ If Sheriff has been configured but has not run: `Sheriff has not run yet. Run /s
 
 ### `/sheriff:configure`
 
-Re-run the onboarding wizard to update project settings — test runner, phase strategy, parallel agent count, excluded directories, or any other config field.
+Re-run the onboarding wizard to update project settings — test types, test runners, phase strategy, parallel agent count, excluded directories, or any other config field.
 
 ```
 /sheriff:configure
@@ -252,7 +321,7 @@ After changing configuration, re-run discovery so the plan reflects your updated
 /sheriff:run
 ```
 
-> Settings you can change: test runner, framework, language, source directories, excluded directories, phase strategy (`risk` / `domain` / `complexity`), `onTestFailure` behavior, `maxParallelAgents`, and model assignments per tier.
+> Settings you can change: test types (unit/E2E), test runners, framework, language, source directories, excluded directories, phase strategy (`risk` / `domain` / `complexity`), `onTestFailure` behavior, `maxParallelAgents`, and model assignments per tier.
 
 ---
 
@@ -275,6 +344,20 @@ Reset Sheriff state. Never deletes test files written to your `tests/` directory
 
 ---
 
+### `/sheriff:update`
+
+Check for and install the latest version of Sheriff from npm.
+
+```
+/sheriff:update
+```
+
+Sheriff compares your installed version against the latest published version. If an update is available, it re-runs the installer to upgrade in place. Your `.sheriff/` project data and test files are never affected by updates.
+
+> Sheriff also checks for updates automatically at the start of every `/sheriff:run` and shows a non-blocking notice if a newer version is available.
+
+---
+
 ## Configuration
 
 After running `/sheriff:run` for the first time, Sheriff writes a `.sheriff/.sheriff.json` config file. You can edit this file directly or re-run `/sheriff:configure` to update it interactively.
@@ -283,9 +366,20 @@ After running `/sheriff:run` for the first time, Sheriff writes a `.sheriff/.she
 
 ```json
 {
-  "testRunner": "vitest",
+  "testTypes": {
+    "unit": true,
+    "e2e": true
+  },
+  "testRunners": {
+    "unit": "vitest",
+    "e2e": "playwright"
+  },
+  "testRunnerSetup": {
+    "unit": "detected",
+    "e2e": "installed"
+  },
   "framework": "nuxt",
-  "language": "javascript",
+  "language": "typescript",
   "sourceDirs": ["src/", "components/", "composables/", "stores/", "utils/"],
   "excludeDirs": ["node_modules", "dist", ".nuxt"],
   "phaseStrategy": "risk",
@@ -303,7 +397,9 @@ After running `/sheriff:run` for the first time, Sheriff writes a `.sheriff/.she
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `testRunner` | `string` | The test runner to use — `vitest`, `jest`, `mocha`, `bun`, etc. Sheriff will detect this automatically during onboarding. |
+| `testTypes` | `object` | Which test types are enabled. `{ unit: boolean, e2e: boolean }`. At least one must be `true`. |
+| `testRunners` | `object` | The test runner for each type. `{ unit: "vitest"\|"jest"\|etc, e2e: "playwright"\|"cypress"\|etc }`. `null` if that type is disabled. |
+| `testRunnerSetup` | `object` | How each runner was configured. `"detected"` if already in the project, `"installed"` if Sheriff set it up, `null` if disabled. |
 | `framework` | `string` | Your project's framework — `nuxt`, `vue`, `react`, `next`, `express`, `none`, etc. Informs how executor agents write tests and set up mocks. |
 | `language` | `string` | `javascript` or `typescript`. |
 | `sourceDirs` | `string[]` | Directories Sheriff should scan for source files. Relative to project root. |
@@ -312,6 +408,15 @@ After running `/sheriff:run` for the first time, Sheriff writes a `.sheriff/.she
 | `onTestFailure` | `string` | What executor agents do when a test fails after all retry attempts. One of `flag`, `fix`, or `fix-and-notify`. |
 | `maxParallelAgents` | `number` | Maximum number of executor agents that can run simultaneously within a wave. Default: `3`. Increase for large codebases; reduce if you hit rate limits. |
 | `models` | `object` | Model assignments per tier. Keys: `light`, `medium`, `heavy`. Values: `"haiku"`, `"sonnet"`, or `"opus"`. See [Model Profiles](#model-profiles). |
+
+### `testTypes` Options
+
+| Setting | Effect |
+|---------|--------|
+| `unit: true` | Sheriff discovers unit test gaps and generates unit tests using the configured unit runner. |
+| `unit: false` | Unit test gaps are marked as `⊘ disabled` in TEST_MAP.md. No unit test sub-phases are planned. |
+| `e2e: true` | Sheriff discovers E2E test gaps and generates E2E tests using the configured E2E runner. |
+| `e2e: false` | E2E test gaps are marked as `⊘ disabled` in TEST_MAP.md. No E2E test sub-phases are planned. |
 
 ### `onTestFailure` Options
 
@@ -364,9 +469,9 @@ Sheriff stores all of its state in a `.sheriff/` directory at your project root.
 
 **`.sheriff.json`** — The project configuration file. Written by the interrogator agent during onboarding. Edit directly or via `/sheriff:configure`.
 
-**`TEST_MAP.md`** — The complete coverage map for your project. Lists every source file with its unit and E2E test status, complexity rating, risk level, and notes on existing coverage. Generated by the discovery agent. This is the source of truth for what needs to be tested.
+**`TEST_MAP.md`** — The complete coverage map for your project. Lists every source file with its unit and E2E test status (respecting test type settings), complexity rating, risk level, and notes on existing coverage. Generated by the discovery agent. This is the source of truth for what needs to be tested.
 
-**`PHASES.md`** — The execution plan. Divides work from `TEST_MAP.md` into numbered phases and waves. Each sub-phase entry records its status (`[ ]` pending, `🔒` locked, `✅` pass, `⚠️` needs review, `❌` fail), its wave assignment, dependencies, and the target test file path.
+**`PHASES.md`** — The execution plan. Divides work from `TEST_MAP.md` into numbered phases and waves. Each sub-phase entry records its status (`[ ]` pending, `🔒` locked, `✅` pass, `⚠️` needs review, `❌` fail), its wave assignment, dependencies, and the target test file path. Only enabled test types appear as sub-phases.
 
 **`results/`** — One report file per sub-phase, written by executor agents after each sub-phase completes. Contains test counts, pass/fail breakdown, retry history, and any notes for flagged items.
 
@@ -410,6 +515,8 @@ If all three attempts fail, the sub-phase is marked `⚠️ needs review` and ex
 
 Sheriff makes atomic git commits per sub-phase, so every passing test batch is safely checkpointed before the next batch begins. If a catastrophic failure occurs mid-phase, Sheriff rolls back to the last clean commit and marks the failed sub-phases for re-queuing.
 
+When installing new test runners, Sheriff creates a pre-setup checkpoint commit so the entire setup can be rolled back cleanly if anything goes wrong.
+
 ### Stale Lock Detection
 
 When Sheriff spawns executor agents in parallel, each agent claims its sub-phase by writing a lock entry in `PHASES.md`. Before each wave, the orchestrator runs a watchdog check: any sub-phase that has been locked for longer than expected but has no result file is treated as abandoned. Stale locks are released and the sub-phase is re-queued for the next available executor.
@@ -417,6 +524,10 @@ When Sheriff spawns executor agents in parallel, each agent claims its sub-phase
 ### Mock Pattern Detection
 
 The discovery agent reads a sample of your existing test files before writing `TEST_MAP.md`. It identifies your project's mocking conventions — `vi.mock`, `jest.mock`, manual factories, MSW handlers, etc. — and records them as annotations. Executor agents read these annotations so their generated tests match your codebase's patterns from the start.
+
+### Automatic Version Checks
+
+Every time `/sheriff:run` executes, it checks npm for a newer version and displays a non-blocking notice if an update is available. You can update at any time with `/sheriff:update`.
 
 ---
 
@@ -464,10 +575,13 @@ Removes all Sheriff files (commands, agents, hooks, tools) and cleans Sheriff's 
 |-------------|---------|
 | Node.js | >= 18.0.0 |
 | Claude Code CLI | Latest |
-| Test runner | vitest, jest, mocha, bun, or any runner with a CLI |
 | Project type | JavaScript or TypeScript |
 
-Sheriff works with any JS/TS project — React, Vue, Nuxt, Next.js, Express, plain Node, Bun, monorepos. If your project has a `package.json` and a test runner, Sheriff can cover it.
+**Test runner**: Sheriff works with Vitest, Jest, Mocha, or any runner with a CLI. If your project doesn't have a test runner, Sheriff will recommend one and set it up for you.
+
+**E2E runner** *(optional)*: Playwright, Cypress, Nightwatch, Puppeteer, or any E2E tool with a CLI.
+
+Sheriff works with any JS/TS project — React, Vue, Nuxt, Next.js, Svelte, Express, Fastify, NestJS, plain Node, Bun, monorepos. If your project has a `package.json`, Sheriff can cover it.
 
 ---
 
@@ -485,10 +599,10 @@ Contributions are very welcome. Whether it's a bug report, a new phase strategy,
 
 A few areas where help would be especially valuable:
 
-- **Test runner adapters** — improving support for mocha, bun, jasmine, and others
+- **Test runner adapters** — improving setup recipes for Mocha, Bun test, Jasmine, and others
 - **Framework-specific mock patterns** — better out-of-the-box detection for Angular, Svelte, SolidJS
-- **E2E test support** — Playwright and Cypress integration
+- **E2E patterns** — deeper Playwright and Cypress test generation strategies
 - **Monorepo handling** — smarter scoping for pnpm/yarn/Nx workspaces
+- **Runner config templates** — more framework-specific minimal configs
 
 If you're building on top of Sheriff or integrating it into a larger workflow, feel free to open a discussion — feedback on the agent API shapes the roadmap.
-

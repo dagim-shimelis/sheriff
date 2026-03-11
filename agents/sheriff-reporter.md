@@ -39,6 +39,7 @@ Update the Phase Progress table row for this phase:
 - Change to ⚠️ if any sub-phases need review
 - Change to ❌ if any sub-phases failed completely
 - Update "Sub-phases" count to show actual: "12 / 12"
+- Update "Tests" column with: "{W}✍ {P}✅ {F}❌" where W = total tests written (passing + skipped + failed), P = passing, F = failed. If no failures, omit the failed part. Example: "24✍ 22✅ 2❌" or "18✍ 18✅"
 
 Use:
 ```bash

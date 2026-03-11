@@ -21,7 +21,7 @@ Read .sheriff/.sheriff.json to get:
 - sourceDirs
 - excludeDirs
 - excludePatterns
-- testRunner
+- testRunners (object with `unit` and `e2e` runner names, e.g. `{ unit: "vitest", e2e: "playwright" }`)
 - language
 - testTypes (which test types are enabled: `unit`, `e2e`)
 
@@ -73,7 +73,9 @@ Use this exact format:
 ```markdown
 # Sheriff TEST_MAP
 Generated: {ISO timestamp}
-Project: {framework} / {testRunner} / {language}
+Project: {framework} / {language}
+Unit runner: {testRunners.unit or "disabled"}
+E2E runner: {testRunners.e2e or "disabled"}
 
 ## Mock Patterns Detected
 {Document key mock patterns found in existing tests}

@@ -12,6 +12,22 @@ Replace these at runtime:
 
 ## Phase 0 — Bootstrap
 
+### Version check
+
+```bash
+node {SHERIFF_TOOLS} check-update --raw
+```
+
+If `updateAvailable` is `true`, print a notice before continuing (do NOT block the run):
+```
+💡 Sheriff v{latestVersion} is available (you have v{currentVersion}).
+   Run /sheriff:update to upgrade.
+```
+
+If the command errors or returns `updateAvailable: false`, continue silently.
+
+### Config check
+
 ```bash
 node {SHERIFF_TOOLS} config-exists
 ```
@@ -122,6 +138,7 @@ Task(
     Sub-phase: {subphaseId}
     Agent ID: executor-{subphaseId}-{timestamp}
     Sheriff tools: {SHERIFF_TOOLS}
+    Test runners: {config.testRunners}
     Test run command: {testRunCommand}
   "
 )

@@ -27,6 +27,8 @@
  *   write-config                  Read config JSON from stdin and write
  *   config-exists                 Exit 0 if .sheriff.json exists, 1 otherwise
  *   print-banner                  Print the Sheriff ASCII banner with version
+ *   check-update                  Check npm for newer version, exit 0 if up-to-date, 1 if update available
+ *   current-version               Print the currently installed version
  */
 
 const path = require('path');
@@ -239,6 +241,32 @@ switch (command) {
   case 'print-banner': {
     const version = require('../../package.json').version;
     printBanner(version);
+    break;
+  }
+
+  case 'check-update': {
+    const { execSync } = require('child_process');
+    const currentVersion = require('../../package.json').version;
+    const packageName = require('../../package.json').name;
+    try {
+      const latest = execSync(`npm view ${packageName} version`, {
+        encoding: 'utf8',
+        timeout: 10000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+      const updateAvailable = latest !== currentVersion;
+      out({ currentVersion, latestVersion: latest, updateAvailable });
+      process.exit(updateAvailable ? 1 : 0);
+    } catch (e) {
+      // Network error or package not published yet — treat as up-to-date
+      out({ currentVersion, latestVersion: null, updateAvailable: false, error: e.message });
+      process.exit(0);
+    }
+  }
+
+  case 'current-version': {
+    const version = require('../../package.json').version;
+    out({ version });
     break;
   }
 

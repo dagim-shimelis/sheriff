@@ -65,11 +65,13 @@ Rules:
 
 ## Step 5 — Run the tests
 
+Determine the correct run command from `.sheriff.json` → `testRunners`:
+- For unit test sub-phases, use `testRunners.unit` (e.g., `npx vitest run {testFile}` or `npx jest {testFile}`)
+- For E2E test sub-phases, use `testRunners.e2e` (e.g., `npx playwright test {testFile}` or `npx cypress run --spec {testFile}`)
+
 ```bash
 {testRunCommand} {testFile}
 ```
-
-Where testRunCommand comes from .sheriff.json.
 
 ## Step 6 — Fix failures (up to 3 attempts)
 

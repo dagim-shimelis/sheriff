@@ -67,10 +67,10 @@ Strategy: {phaseStrategy}
 
 ## Phase Progress
 
-| Phase | Title | Status | Sub-phases |
-|-------|-------|--------|-----------|
-| 1 | Critical Coverage | [ ] | 0 / {N} |
-| 2 | Core Stores & Composables | [ ] | 0 / {N} |
+| Phase | Title | Status | Sub-phases | Tests |
+|-------|-------|--------|-----------|-------|
+| 1 | Critical Coverage | [ ] | 0 / {N} | — |
+| 2 | Core Stores & Composables | [ ] | 0 / {N} | — |
 
 ---
 
@@ -122,6 +122,6 @@ Count sub-phases per phase and fill in the table header.
 - Every untested file from TEST_MAP.md has a corresponding sub-phase
 - Every sub-phase has: wave, depends_on, file, source, type, lock: —, lock_time: —
 - Wave assignments respect maxParallelAgents
-- Phase Progress table is accurate
+- Phase Progress table is accurate (includes Tests column initialized to —)
 - Sub-phases within the same wave have no dependencies on each other
 </success_criteria>

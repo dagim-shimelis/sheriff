@@ -29,7 +29,19 @@ function configExists(cwd = process.cwd()) {
 function getDefault() {
   return {
     version: '0.1.0',
-    testRunner: null,
+    testRunner: null,           // deprecated — kept for backward compat
+    testRunners: {
+      unit: null,               // "vitest" | "jest" | "mocha" | etc.
+      e2e: null,                // "playwright" | "cypress" | etc.
+    },
+    testTypes: {
+      unit: true,
+      e2e: true,
+    },
+    testRunnerSetup: {
+      unit: null,               // "detected" | "installed" | null
+      e2e: null,                // "detected" | "installed" | null
+    },
     framework: null,
     language: 'js',
     sourceDirs: ['src', 'components', 'composables', 'stores', 'utils', 'api', 'lib'],

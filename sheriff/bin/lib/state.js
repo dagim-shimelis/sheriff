@@ -51,7 +51,29 @@ function getStatus(cwd = process.cwd()) {
   const review = (phases.match(/⚠️/g) || []).length;
   const pending = total - done - inProgress - review;
 
-  return { initialized: true, total, done, inProgress, review, pending };
+  // Parse test counts from phase summaries
+  let testsWritten = 0;
+  let testsPassing = 0;
+  let testsFailed = 0;
+
+  const summariesDir = path.join(cwd, '.sheriff', 'summaries');
+  if (fs.existsSync(summariesDir)) {
+    const summaryFiles = fs.readdirSync(summariesDir).filter(f => f.startsWith('phase-') && f.endsWith('.md'));
+    for (const file of summaryFiles) {
+      const content = fs.readFileSync(path.join(summariesDir, file), 'utf8');
+      const passingMatch = content.match(/tests_passing:\s*(\d+)/);
+      const skippedMatch = content.match(/tests_skipped:\s*(\d+)/);
+      const failedMatch = content.match(/tests_failed:\s*(\d+)/);
+      const passing = passingMatch ? parseInt(passingMatch[1], 10) : 0;
+      const skipped = skippedMatch ? parseInt(skippedMatch[1], 10) : 0;
+      const failed = failedMatch ? parseInt(failedMatch[1], 10) : 0;
+      testsPassing += passing;
+      testsFailed += failed;
+      testsWritten += passing + skipped + failed;
+    }
+  }
+
+  return { initialized: true, total, done, inProgress, review, pending, testsWritten, testsPassing, testsFailed };
 }
 
 module.exports = {
