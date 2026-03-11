@@ -40,6 +40,11 @@ function getDefault() {
     maxParallelAgents: 3,
     staleLockMinutes: 30,
     confidence: 'high',
+    models: {
+      light: 'haiku',
+      medium: 'sonnet',
+      heavy: 'opus',
+    },
   };
 }
 

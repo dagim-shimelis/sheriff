@@ -68,6 +68,15 @@ A few quick questions:
 
 4. Any directories or files to exclude beyond node_modules/dist?
    (Press enter to skip)
+
+5. Model assignment — which models should Sheriff use for each task tier?
+   Each tier can be: haiku, sonnet, or opus.
+
+   a) Light tasks (file scanning, report assembly):    [default: haiku]
+   b) Medium tasks (planning, onboarding):             [default: sonnet]
+   c) Heavy tasks (test writing, bug fixing):           [default: opus]
+
+   Press enter to accept defaults, or type your choices (e.g., "sonnet sonnet opus").
 ```
 
 Do NOT ask about anything you detected with high confidence.
@@ -95,7 +104,7 @@ Run /sheriff:run to start the discovery and test generation process.
 
 <success_criteria>
 - .sheriff/.sheriff.json exists and is valid JSON
-- All required fields are populated: testRunner, framework, language, sourceDirs, excludeDirs, phaseStrategy, onTestFailure, maxParallelAgents
+- All required fields are populated: testRunner, framework, language, sourceDirs, excludeDirs, phaseStrategy, onTestFailure, maxParallelAgents, models
 - The user was asked the minimum number of questions necessary
 - If testRunner could not be detected, the user was informed clearly
 </success_criteria>

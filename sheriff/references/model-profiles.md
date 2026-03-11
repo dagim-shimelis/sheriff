@@ -1,23 +1,43 @@
 # Sheriff — Model Profiles
 
-These are the default model assignments for each Sheriff agent.
+Sheriff uses three model tiers that the user can configure in `.sheriff.json` under the `models` key.
 
-"inherit" means: use whatever model the user has configured for the current tier.
-This avoids hardcoded model IDs that may be blocked by org policies.
+## Tiers
 
-## Agent → Model Mapping
+| Tier | Default | Used by | Reasoning |
+|------|---------|---------|-----------|
+| **light** | haiku | discovery, reporter | File scanning, report assembly — high volume, no deep reasoning needed |
+| **medium** | sonnet | interrogator, planner | Needs reasoning to infer project setup and plan phases correctly |
+| **heavy** | opus | executor | Core work — write, run, fix tests. Most important agent. |
 
-| Agent | Model | Reasoning |
-|-------|-------|-----------|
-| sheriff-interrogator | inherit (Sonnet) | Needs reasoning to infer project setup from partial signals |
-| sheriff-discovery | claude-haiku-4-5-20251001 | File scanning — high volume, cheap, no deep reasoning needed |
-| sheriff-planner | inherit (Sonnet) | Needs reasoning to phase and prioritize correctly |
-| sheriff-executor | inherit (Sonnet) | Core work — write, run, fix tests. Most important agent. |
-| sheriff-reporter | claude-haiku-4-5-20251001 | Assembling results, not reasoning. Cheap. |
+## Configuration
 
-## "inherit" resolution
+Users can set each tier to `haiku`, `sonnet`, or `opus` in `.sheriff.json`:
 
-When an agent model is "inherit", Claude Code uses the user's configured default model.
-For most users this will be Sonnet. For users on Opus plans it may be Opus.
+```json
+{
+  "models": {
+    "light": "haiku",
+    "medium": "sonnet",
+    "heavy": "opus"
+  }
+}
+```
 
-This is intentional — executor quality scales with whatever the user has available.
+This is configured during onboarding (`/sheriff:run` or `/sheriff:configure`).
+
+## Agent → Tier Mapping
+
+| Agent | Tier |
+|-------|------|
+| sheriff-interrogator | medium |
+| sheriff-discovery | light |
+| sheriff-planner | medium |
+| sheriff-executor | heavy |
+| sheriff-reporter | light |
+
+## Valid model values
+
+- `haiku` — fastest, cheapest. Good for scanning and assembly tasks.
+- `sonnet` — balanced. Good for planning and reasoning.
+- `opus` — most capable. Best for writing and fixing code.

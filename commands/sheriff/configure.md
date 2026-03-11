@@ -1,6 +1,6 @@
 ---
 name: sheriff:configure
-description: Update Sheriff's project configuration — re-run onboarding to change test runner, phase strategy, parallel agents, or excluded directories.
+description: Update Sheriff's project configuration — re-run onboarding to change test runner, phase strategy, parallel agents, excluded directories, or model assignments.
 allowed-tools:
   - Read
   - Write

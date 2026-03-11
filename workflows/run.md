@@ -32,11 +32,16 @@ Print a brief status to orient the user.
 
 Check if .sheriff/TEST_MAP.md exists. If not:
 
+Read the model tier from `.sheriff.json` → `config.models.light` and resolve to a model ID:
+- `"haiku"` → `"haiku"`
+- `"sonnet"` → `"sonnet"`
+- `"opus"` → `"opus"`
+
 Spawn discovery agent:
 ```
 Task(
   subagent_type="sheriff-discovery",
-  model="claude-haiku-4-5-20251001",
+  model="{config.models.light}",
   prompt="Run the sheriff-discovery workflow. Project root: {cwd}. Sheriff tools path: {SHERIFF_TOOLS}."
 )
 ```
@@ -50,11 +55,11 @@ If it does not exist, stop with an error.
 
 Check if .sheriff/PHASES.md exists. If not:
 
-Spawn planner agent:
+Spawn planner agent using `config.models.medium`:
 ```
 Task(
   subagent_type="sheriff-planner",
-  model="inherit",
+  model="{config.models.medium}",
   prompt="Run the sheriff-planner workflow. Project root: {cwd}. Sheriff tools path: {SHERIFF_TOOLS}."
 )
 ```
@@ -86,12 +91,12 @@ Start with wave 1.
 
 ### Spawn executors in parallel
 
-For each sub-phase in the current wave (up to maxParallelAgents):
+For each sub-phase in the current wave (up to maxParallelAgents), using `config.models.heavy`:
 
 ```
 Task(
   subagent_type="sheriff-executor",
-  model="inherit",
+  model="{config.models.heavy}",
   prompt="
     Run the sheriff-executor workflow for sub-phase {subphaseId}.
 
@@ -134,11 +139,11 @@ Pre-assemble results:
 node {SHERIFF_TOOLS} assemble-results {PHASE_NUM} --raw
 ```
 
-Spawn reporter agent:
+Spawn reporter agent using `config.models.light`:
 ```
 Task(
   subagent_type="sheriff-reporter",
-  model="claude-haiku-4-5-20251001",
+  model="{config.models.light}",
   prompt="
     Run the sheriff-reporter workflow for phase {PHASE_NUM}.
     Sheriff tools: {SHERIFF_TOOLS}.

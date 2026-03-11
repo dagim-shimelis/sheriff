@@ -146,23 +146,37 @@ Sheriff runs a six-stage pipeline. Each stage is handled by a dedicated agent. S
 
 Sheriff is composed of five specialized agents. Each agent has a defined role, a color-coded identity in logs, and a model profile matched to its computational demands.
 
-| Agent | Role | Produces | Model Profile |
+| Agent | Role | Produces | Model Tier |
 |---|---|---|---|
-| `sheriff-interrogator` | Onboards to the project — detects framework, test runner, package manager, tsconfig, and confirms scope with the user | `.sheriff.json` | Sonnet |
-| `sheriff-discovery` | Scans all source files against existing tests, flags every untested file and function, builds the full coverage gap map | `TEST_MAP.md` | Haiku |
-| `sheriff-planner` | Reads the gap map, groups work by risk/domain/complexity, assigns files to ordered waves, produces the phased execution plan | `PHASES.md` | Sonnet |
-| `sheriff-executor` | Claims a sub-phase, writes tests for its assigned files, runs the suite, auto-fixes failures (up to 3 rounds), commits passing tests — the primary workhorse | per-phase commit | Sonnet |
-| `sheriff-reporter` | Collects results from all executor runs, assembles structured phase summaries, calculates coverage delta | phase summary reports | Haiku |
+| `sheriff-interrogator` | Onboards to the project — detects framework, test runner, package manager, tsconfig, and confirms scope with the user | `.sheriff.json` | Medium (default: Sonnet) |
+| `sheriff-discovery` | Scans all source files against existing tests, flags every untested file and function, builds the full coverage gap map | `TEST_MAP.md` | Light (default: Haiku) |
+| `sheriff-planner` | Reads the gap map, groups work by risk/domain/complexity, assigns files to ordered waves, produces the phased execution plan | `PHASES.md` | Medium (default: Sonnet) |
+| `sheriff-executor` | Claims a sub-phase, writes tests for its assigned files, runs the suite, auto-fixes failures (up to 3 rounds), commits passing tests — the primary workhorse | per-phase commit | Heavy (default: Opus) |
+| `sheriff-reporter` | Collects results from all executor runs, assembles structured phase summaries, calculates coverage delta | phase summary reports | Light (default: Haiku) |
 
 ### Model Profiles
 
-Sheriff uses a **tiered model profile system** to balance cost and capability:
+Sheriff uses three configurable **model tiers** to balance cost and capability. You can assign `haiku`, `sonnet`, or `opus` to each tier during onboarding or via `/sheriff:configure`.
 
-- **Haiku** — Used for scanning and reporting tasks that require breadth over depth (discovery, reporting). Fast and cheap.
-- **Sonnet** — Used for reasoning-heavy tasks that require understanding code structure, risk, and intent (interrogation, planning, execution).
-- **inherit** — Any agent can be set to `inherit`, which defers to the model currently configured in the user's Claude Code environment.
+| Tier | Default | Agents | Purpose |
+|------|---------|--------|---------|
+| **Light** | Haiku | discovery, reporter | File scanning, report assembly — high volume, no deep reasoning needed |
+| **Medium** | Sonnet | interrogator, planner | Reasoning about project structure, risk assessment, phase ordering |
+| **Heavy** | Opus | executor | Core work — writing, running, and fixing tests. Most important agent |
 
-This means Sheriff runs efficiently by default while still applying full reasoning power where it counts.
+Configure in `.sheriff.json`:
+
+```json
+{
+  "models": {
+    "light": "haiku",
+    "medium": "sonnet",
+    "heavy": "opus"
+  }
+}
+```
+
+Want to run everything on Opus for maximum quality? Set all three tiers to `"opus"`. Want to minimize cost? Set everything to `"haiku"`. Mix and match to suit your needs.
 
 ---
 
@@ -238,7 +252,7 @@ After changing configuration, re-run discovery so the plan reflects your updated
 /sheriff:run
 ```
 
-> Settings you can change: test runner, framework, language, source directories, excluded directories, phase strategy (`risk` / `domain` / `complexity`), `onTestFailure` behavior, and `maxParallelAgents`.
+> Settings you can change: test runner, framework, language, source directories, excluded directories, phase strategy (`risk` / `domain` / `complexity`), `onTestFailure` behavior, `maxParallelAgents`, and model assignments per tier.
 
 ---
 
@@ -276,7 +290,12 @@ After running `/sheriff:run` for the first time, Sheriff writes a `.sheriff/.she
   "excludeDirs": ["node_modules", "dist", ".nuxt"],
   "phaseStrategy": "risk",
   "onTestFailure": "flag",
-  "maxParallelAgents": 3
+  "maxParallelAgents": 3,
+  "models": {
+    "light": "haiku",
+    "medium": "sonnet",
+    "heavy": "opus"
+  }
 }
 ```
 
@@ -292,6 +311,7 @@ After running `/sheriff:run` for the first time, Sheriff writes a `.sheriff/.she
 | `phaseStrategy` | `string` | How Sheriff groups and orders work. One of `risk`, `domain`, or `complexity`. See [Phase Strategies](#phase-strategies). |
 | `onTestFailure` | `string` | What executor agents do when a test fails after all retry attempts. One of `flag`, `fix`, or `fix-and-notify`. |
 | `maxParallelAgents` | `number` | Maximum number of executor agents that can run simultaneously within a wave. Default: `3`. Increase for large codebases; reduce if you hit rate limits. |
+| `models` | `object` | Model assignments per tier. Keys: `light`, `medium`, `heavy`. Values: `"haiku"`, `"sonnet"`, or `"opus"`. See [Model Profiles](#model-profiles). |
 
 ### `onTestFailure` Options
 
