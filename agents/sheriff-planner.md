@@ -56,7 +56,13 @@ Within a phase, group sub-phases into waves based on dependencies:
 
 Max parallel per wave = maxParallelAgents from config.
 
-## Step 4 — Write PHASES.md
+## Step 4 — Validate source files exist
+
+Before creating sub-phases, verify every source file from TEST_MAP.md exists on disk. For any file that doesn't exist:
+- Skip it (do not create a sub-phase for it)
+- Add a note to the PHASES.md header: "Skipped {N} files not found on disk: {list}"
+
+## Step 5 — Write PHASES.md
 
 Use this exact format:
 
@@ -111,7 +117,7 @@ Rules for sub-phase content:
 - Prefer "new file" over "append" unless an existing test file clearly should be extended
 - Mark type: "new" | "append"
 
-## Step 5 — Update Phase Progress table
+## Step 6 — Update Phase Progress table
 
 Count sub-phases per phase and fill in the table header.
 

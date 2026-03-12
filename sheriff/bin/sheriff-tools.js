@@ -10,7 +10,8 @@
  * Commands:
  *   init <stage> [subphaseId]     Return all context needed to start a stage
  *   claim-subphase <id> <agentId> Lock a subphase for an executor
- *   release-subphase <id>         Release a stale lock
+ *   release-subphase <id>         Release a stale lock (--force to skip safety check)
+ *   check-release <id>            Check if a subphase is safe to release
  *   mark-complete <id> <result>   Mark subphase pass|fail|review
  *   write-handoff <agentId>       Read handoff content from stdin and write to file
  *   read-handoff <agentId>        Print handoff file content
@@ -20,7 +21,9 @@
  *   git-checkpoint <id>           Create a checkpoint git commit
  *   git-commit <id> [msg]         Create a success git commit
  *   git-rollback                  Reset to last commit
- *   check-stale-locks             List stale locks
+ *   update-testmap <file> <type> <status>  Update TEST_MAP.md coverage (type: unit|e2e, status: tested|review|failed)
+ *   check-stale-locks             List stale locks and orphaned lock files
+ *   cleanup-handoffs              Delete all handoff files
  *   get-status                    Return overall progress
  *   init-project                  Create .sheriff/ dir structure
  *   read-config                   Print current .sheriff.json
@@ -38,6 +41,7 @@ const fs = require('fs');
 const config = require('./lib/config');
 const state = require('./lib/state');
 const phases = require('./lib/phases');
+const testmap = require('./lib/testmap');
 const git = require('./lib/git');
 const results = require('./lib/results');
 const { printBanner } = require('./lib/banner');
@@ -77,7 +81,19 @@ function err(msg) {
 }
 
 function readStdin() {
-  return fs.readFileSync('/dev/stdin', 'utf8');
+  return fs.readFileSync(process.stdin.fd, 'utf8');
+}
+
+// Guard: commands that require .sheriff/ directory to exist
+const requiresSheriffDir = new Set([
+  'claim-subphase', 'release-subphase', 'check-release', 'mark-complete', 'update-testmap',
+  'write-result', 'write-handoff', 'read-handoff', 'assemble-results',
+  'write-summary', 'check-stale-locks', 'cleanup-handoffs', 'get-status',
+  'git-checkpoint', 'git-commit',
+]);
+
+if (requiresSheriffDir.has(command) && !fs.existsSync(path.join(cwd, '.sheriff'))) {
+  err('.sheriff/ directory not found. Run init-project first.');
 }
 
 switch (command) {
@@ -125,9 +141,20 @@ switch (command) {
   }
 
   case 'release-subphase': {
-    const subphaseId = args[1];
+    const forceIndex = args.indexOf('--force');
+    const force = forceIndex !== -1;
+    const releaseArgs = args.filter((a) => a !== '--force');
+    const subphaseId = releaseArgs[1];
     if (!subphaseId) err('release-subphase requires <id>');
-    const result = phases.releaseSubphase(subphaseId, cwd);
+    const result = phases.releaseSubphase(subphaseId, cwd, force);
+    out(result);
+    break;
+  }
+
+  case 'check-release': {
+    const subphaseId = args[1];
+    if (!subphaseId) err('check-release requires <subphaseId>');
+    const result = phases.getSafeToRelease(subphaseId, cwd);
     out(result);
     break;
   }
@@ -173,7 +200,14 @@ switch (command) {
     if (!phaseNum) err('assemble-results requires <phaseNum>');
     const assembled = results.assembleResults(phaseNum, cwd);
     if (!assembled) err(`No results found for phase ${phaseNum}`);
-    out({ success: true, file: state.ASSEMBLED_FILE, length: assembled.length });
+    out({
+      success: true,
+      file: state.ASSEMBLED_FILE,
+      length: assembled.content.length,
+      total: assembled.total,
+      found: assembled.found,
+      missing: assembled.missing,
+    });
     break;
   }
 
@@ -209,9 +243,26 @@ switch (command) {
     break;
   }
 
+  case 'update-testmap': {
+    const [, , sourceFile, testType, status] = args;
+    if (!sourceFile || !testType || !status) err('update-testmap requires <sourceFile> <unit|e2e> <tested|review|failed>');
+    if (!['unit', 'e2e'].includes(testType)) err('testType must be unit or e2e');
+    if (!['tested', 'review', 'failed'].includes(status)) err('status must be tested, review, or failed');
+    const r = testmap.updateCoverage(sourceFile, testType, status, cwd);
+    out(r);
+    break;
+  }
+
   case 'check-stale-locks': {
     const stale = phases.getStaleLocks(cwd);
-    out(stale);
+    const orphaned = phases.getOrphanedLockFiles(cwd);
+    out({ staleLocks: stale, orphanedLockFiles: orphaned });
+    break;
+  }
+
+  case 'cleanup-handoffs': {
+    const result = state.cleanupHandoffs(cwd);
+    out(result);
     break;
   }
 

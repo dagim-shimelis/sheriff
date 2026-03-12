@@ -22,8 +22,10 @@ function readFile(relPath, cwd = process.cwd()) {
 
 function writeFile(relPath, content, cwd = process.cwd()) {
   const full = path.join(cwd, relPath);
+  const tmp = full + '.tmp';
   fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, content);
+  fs.writeFileSync(tmp, content);
+  fs.renameSync(tmp, full);
 }
 
 function fileExists(relPath, cwd = process.cwd()) {
@@ -38,6 +40,24 @@ function writeHandoff(agentId, content, cwd = process.cwd()) {
 
 function readHandoff(agentId, cwd = process.cwd()) {
   return readFile(`.sheriff/handoffs/handoff-${agentId}.md`, cwd);
+}
+
+function deleteHandoff(identifier, cwd = process.cwd()) {
+  const file = `.sheriff/handoffs/handoff-${identifier}.md`;
+  const full = path.join(cwd, file);
+  if (fs.existsSync(full)) {
+    fs.unlinkSync(full);
+    return { deleted: true, file };
+  }
+  return { deleted: false, file };
+}
+
+function cleanupHandoffs(cwd = process.cwd()) {
+  const dir = path.join(cwd, '.sheriff/handoffs');
+  if (!fs.existsSync(dir)) return { deleted: 0 };
+  const files = fs.readdirSync(dir).filter(f => f.startsWith('handoff-') && f.endsWith('.md'));
+  for (const f of files) fs.unlinkSync(path.join(dir, f));
+  return { deleted: files.length };
 }
 
 function getStatus(cwd = process.cwd()) {
@@ -83,6 +103,8 @@ module.exports = {
   fileExists,
   writeHandoff,
   readHandoff,
+  deleteHandoff,
+  cleanupHandoffs,
   getStatus,
   SHERIFF_DIR,
   TEST_MAP_FILE,

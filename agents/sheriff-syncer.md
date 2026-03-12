@@ -21,6 +21,7 @@ CRITICAL: Read all files in the <files_to_read> block before doing anything else
 Read these files at execution start:
 - .sheriff/.sheriff.json
 - .sheriff/TEST_MAP.md (if exists)
+- .sheriff/PHASES.md (if exists)
 - {sourceFile} (the changed source file)
 - {testFile} (the existing test file, if one was found)
 </files_to_read>
@@ -38,15 +39,16 @@ Read the source file. If a git diff was provided, understand what specifically c
 
 The orchestrator provides `{testFile}` if one was found. If not, search for it:
 
-1. Check TEST_MAP.md for a mapping
-2. Convention-based search:
+1. Check PHASES.md for a sub-phase block that references this source file — extract the `file:` field for the canonical test path
+2. Check TEST_MAP.md for a mapping
+3. Convention-based search:
    - `stores/foo.js` → `tests/unit/stores/foo.test.js` or `tests/unit/stores/foo.spec.js`
    - `composables/useFoo.js` → `tests/unit/composables/useFoo.test.js`
    - `components/Bar.vue` → `tests/unit/components/Bar.test.js`
    - `utils/baz.js` → `tests/unit/utils/baz.test.js`
    - `api/qux.js` → `tests/unit/api/qux.test.js`
    - `pages/foo.vue` → `tests/unit/pages/foo.test.js`
-3. Glob fallback: `tests/**/*{basename}*.test.{js,ts}`
+4. Glob fallback: `tests/**/*{basename}*.test.{js,ts}`
 
 Set `{MODE}` to:
 - **"update"** — if an existing test file was found
@@ -102,7 +104,22 @@ After 3 attempts on the same failure, mark with `test.skip` and a comment:
 // SHERIFF-SYNC: could not auto-fix after source change — {reason}
 ```
 
-## Step 5 — Commit
+## Step 5 — Update TEST_MAP.md
+
+Update the test map to reflect the current coverage status. This keeps TEST_MAP.md as a reliable source of truth.
+
+```bash
+node {SHERIFF_TOOLS} update-testmap {sourceFile} unit|e2e tested|review|failed --raw
+```
+
+- Use `tested` if at least one test is passing
+- Use `review` if tests were written but some are skipped/need review
+- Use `failed` if the test file could not be created at all
+- The `{sourceFile}` must match the file path as it appears in the TEST_MAP.md Coverage Map table
+
+Skip this step if TEST_MAP.md does not exist (e.g. standalone sync without prior discovery).
+
+## Step 6 — Commit
 
 ```bash
 git add {testFile}
@@ -115,7 +132,7 @@ git add {testFile}
 git commit -m "sheriff-sync: create tests for {sourceFile}"
 ```
 
-## Step 6 — Write sync report
+## Step 7 — Write sync report
 
 Write to `.sheriff/sync/{sourceFileName}.md`:
 
@@ -146,17 +163,19 @@ Write to `.sheriff/sync/{sourceFileName}.md`:
 </execution_flow>
 
 <deviation_rules>
-1. **NEVER create duplicate test files** — if a test exists, update it. Period.
-2. **NEVER modify source files** — you only touch test files
-3. **Remove dead tests** — if a function was deleted from source, remove its tests
-4. **Preserve passing tests** — don't touch test blocks that still pass
-5. **Match existing style** — new test blocks should look like existing ones in the same file
+1. **NEVER create a test file if PHASES.md already records a `file:` path for this source** — use that path even if the file doesn't exist on disk yet (another executor may be writing it)
+2. **NEVER create duplicate test files** — if a test exists, update it. Period.
+3. **NEVER modify source files** — you only touch test files
+4. **Remove dead tests** — if a function was deleted from source, remove its tests
+5. **Preserve passing tests** — don't touch test blocks that still pass
+6. **Match existing style** — new test blocks should look like existing ones in the same file
 </deviation_rules>
 
 <success_criteria>
 - Every changed source file has a corresponding test file (existing or new)
 - All tests pass (or failures are marked test.skip with explanation)
 - No duplicate test files created
+- TEST_MAP.md updated to reflect coverage (if it exists)
 - Sync report written to .sheriff/sync/
 - Git commit for test changes
 </success_criteria>

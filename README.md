@@ -235,11 +235,11 @@ Sheriff is composed of seven specialized agents. Each agent has a defined role, 
 |---|---|---|---|
 | `sheriff-interrogator` | Onboards to the project — detects framework, recommends and configures test runners, validates setup, confirms scope with the user | `.sheriff.json` | Medium (default: Sonnet) |
 | `sheriff-discovery` | Scans all source files against existing tests, flags every untested file and function, respects test type settings, builds the full coverage gap map | `TEST_MAP.md` | Light (default: Haiku) |
-| `sheriff-planner` | Reads the gap map, groups work by risk/domain/complexity, plans only enabled test types, assigns files to ordered waves, produces the phased execution plan | `PHASES.md` | Medium (default: Sonnet) |
+| `sheriff-planner` | Reads the gap map, validates source files exist on disk, groups work by risk/domain/complexity, plans only enabled test types, assigns files to ordered waves, produces the phased execution plan | `PHASES.md` | Medium (default: Sonnet) |
 | `sheriff-auditor` | Reviews source code for bugs, security issues, dead code, and race conditions. Fixes critical/warning issues before tests are written so tests validate correct behavior | audit reports + source fixes | Heavy (default: Opus) |
-| `sheriff-executor` | Claims a sub-phase, checks for existing tests (never creates duplicates), writes or updates tests using the correct runner (unit or E2E), runs the suite, auto-fixes failures (up to 3 rounds), commits passing tests — the primary workhorse | per-phase commit | Heavy (default: Opus) |
-| `sheriff-syncer` | Detects source code changes, finds corresponding test files, runs them, and updates failing tests to match new source behavior. Handles both existing test updates and new test creation | updated test files | Heavy (default: Opus) |
-| `sheriff-reporter` | Collects results from all executor runs, assembles structured phase summaries, calculates coverage delta | phase summary reports | Light (default: Haiku) |
+| `sheriff-executor` | Claims a sub-phase, checks for existing tests and handoffs (never creates duplicates), writes or updates tests using the correct runner (unit or E2E), runs the suite, auto-fixes failures (up to 3 rounds), updates TEST_MAP.md coverage, commits passing tests — the primary workhorse | per-phase commit + TEST_MAP update | Heavy (default: Opus) |
+| `sheriff-syncer` | Detects source code changes, finds corresponding test files (via PHASES.md, TEST_MAP.md, convention, or imports), runs them, and updates failing tests to match new source behavior. Updates TEST_MAP.md coverage. Handles both existing test updates and new test creation | updated test files + TEST_MAP update | Heavy (default: Opus) |
+| `sheriff-reporter` | Collects results from all executor runs, validates completeness against expected sub-phases, assembles structured phase summaries, calculates coverage delta | phase summary reports | Light (default: Haiku) |
 
 ### Model Profiles
 
@@ -654,7 +654,7 @@ Sheriff groups sub-phases within each phase into **waves** based on file depende
 
 ### Context Monitoring
 
-A `PostToolUse` hook tracks context window usage after every tool call inside executor agents. When remaining context drops to **35%**, agents receive a soft warning and are prompted to wrap up their current sub-phase. At **25%** remaining, agents are instructed to write a handoff note before yielding — ensuring no work is lost when context exhausts.
+A `PostToolUse` hook tracks context window usage after every tool call inside executor agents. When remaining context drops to **35%**, agents receive a soft warning and are prompted to wrap up their current sub-phase. At **25%** remaining, agents are instructed to write a handoff note before yielding — ensuring no work is lost when context exhausts. If the sub-phase is re-queued, the next executor reads the handoff and resumes seamlessly.
 
 ### Statusline
 
@@ -676,15 +676,37 @@ When a test fails, executor agents apply a three-stage escalation strategy befor
 
 If all three attempts fail, the sub-phase is marked `⚠️ needs review` and execution continues with the next sub-phase.
 
+If a git commit fails after tests pass, executors attempt a rollback and retry once before marking the sub-phase for review with the git error noted in the result report.
+
 ### Git Safety
 
 Sheriff makes atomic git commits per sub-phase, so every passing test batch is safely checkpointed before the next batch begins. If a catastrophic failure occurs mid-phase, Sheriff rolls back to the last clean commit and marks the failed sub-phases for re-queuing.
 
 When installing new test runners, Sheriff creates a pre-setup checkpoint commit so the entire setup can be rolled back cleanly if anything goes wrong.
 
+### Handoff Recovery
+
+When an executor agent reaches context window limits mid-work, it writes a structured handoff note before yielding. If the sub-phase is re-queued, the next executor reads the handoff, finds any partial test file already written, and resumes from where the previous agent left off — no duplicate work, no lost progress.
+
+### Live TEST_MAP.md Updates
+
+Executor and syncer agents update `TEST_MAP.md` after every sub-phase completes, keeping the coverage map accurate in real time. Summary counts (tested, needed, N/A) are automatically recalculated. This means `TEST_MAP.md` is always a reliable source of truth — even mid-run.
+
 ### Stale Lock Detection
 
-When Sheriff spawns executor agents in parallel, each agent claims its sub-phase by writing a lock entry in `PHASES.md`. Before each wave, the orchestrator runs a watchdog check: any sub-phase that has been locked for longer than expected but has no result file is treated as abandoned. Stale locks are released and the sub-phase is re-queued for the next available executor.
+When Sheriff spawns executor agents in parallel, each agent claims its sub-phase by writing a lock entry in `PHASES.md`. Lock files now include PID and timestamp metadata, enabling accurate stale detection: if the owning process is no longer alive or the lock is older than 60 seconds, it's automatically cleaned up. Orphaned file-level locks (`.phases.lock`, `.testmap.lock`) are also detected and reported. Before each wave, the orchestrator runs a watchdog check — stale locks are released and the sub-phase is re-queued for the next available executor.
+
+### Atomic File Writes
+
+All Sheriff state file writes use a write-to-temp-then-rename strategy, preventing corruption if a process is interrupted mid-write. This applies to `PHASES.md`, `TEST_MAP.md`, results, and all other `.sheriff/` files.
+
+### Source File Validation
+
+The planner agent validates that every source file from `TEST_MAP.md` exists on disk before creating sub-phases. Missing files are skipped and noted in the `PHASES.md` header, preventing executor agents from being dispatched to test files that no longer exist.
+
+### Missing Results Detection
+
+The reporter agent cross-references assembled result files against expected sub-phases from `PHASES.md`. Any sub-phases that completed without writing a result file (e.g., due to a crash) are flagged in the phase summary, and the phase is marked for review rather than passing.
 
 ### Mock Pattern Detection
 
@@ -758,7 +780,7 @@ MIT © [dagim_s](https://github.com/dagim-mante)
 
 ## Contributing
 
-Sheriff is at **v0.1.0** — early, functional, and improving fast.
+Sheriff is at **v0.1.5** — early, functional, and improving fast.
 
 Contributions are very welcome. Whether it's a bug report, a new phase strategy, support for an additional test runner, better mock pattern detection, or improvements to the agent prompts — open an issue or pull request on GitHub.
 

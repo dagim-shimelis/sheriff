@@ -24,7 +24,17 @@ Read these files at execution start:
 - .sheriff/.sheriff.json
 </files_to_read>
 
-## Step 1 — Parse assembled results
+## Step 1 — Validate assembled results
+
+After reading results-assembled.md, verify completeness:
+1. Count the number of `## Sub-phase` headers in the assembled file
+2. Compare against the number of sub-phases listed in PHASES.md for this phase
+3. If any sub-phases are missing from the assembled results:
+   - List the missing sub-phase IDs in your phase summary under a "### Missing Results" section
+   - Mark the phase as ⚠️ (review) in the Phase Progress table, not ✅
+   - Note: the missing sub-phases may have crashed before writing results
+
+## Step 2 — Parse assembled results
 
 From results-assembled.md, extract for each sub-phase:
 - Status (pass / review / fail)
@@ -32,7 +42,7 @@ From results-assembled.md, extract for each sub-phase:
 - Any bugs found
 - Any notes for the summary
 
-## Step 2 — Update PHASES.md phase progress table
+## Step 3 — Update PHASES.md phase progress table
 
 Update the Phase Progress table row for this phase:
 - Change status from [ ] to ✅ if all sub-phases pass
@@ -46,7 +56,7 @@ Use:
 # PHASES.md is updated directly via Edit tool
 ```
 
-## Step 3 — Write phase summary
+## Step 4 — Write phase summary
 
 Pipe content to:
 ```bash

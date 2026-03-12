@@ -20,6 +20,21 @@ function assembleResults(phaseNum, cwd = process.cwd()) {
   const resultsPath = path.join(cwd, RESULTS_DIR);
   if (!fs.existsSync(resultsPath)) return null;
 
+  // Read PHASES.md to extract all sub-phase IDs for this phase
+  const { PHASES_FILE } = require('./state');
+  const phasesContent = readFile(PHASES_FILE, cwd);
+  const expectedSubphases = [];
+  if (phasesContent) {
+    const subphasePattern = new RegExp(
+      `### (${String(phaseNum).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.\\d+)`,
+      'g',
+    );
+    let match;
+    while ((match = subphasePattern.exec(phasesContent)) !== null) {
+      expectedSubphases.push(match[1].trim());
+    }
+  }
+
   const files = fs.readdirSync(resultsPath)
     .filter((f) => f.endsWith('.md'))
     .filter((f) => {
@@ -29,12 +44,19 @@ function assembleResults(phaseNum, cwd = process.cwd()) {
     })
     .sort();
 
-  if (files.length === 0) return null;
+  if (files.length === 0 && expectedSubphases.length === 0) return null;
+
+  // Determine which sub-phases have result files
+  const foundSubphases = files.map((f) => f.replace('.md', '').replace(/-/g, '.'));
+  const missing = expectedSubphases.filter((sp) => !foundSubphases.includes(sp));
+
+  const total = expectedSubphases.length || files.length;
+  const found = files.length;
 
   const parts = [
     `# Sheriff Phase ${phaseNum} — Assembled Results\n`,
     `Generated: ${new Date().toISOString()}\n`,
-    `Total sub-phases: ${files.length}\n\n---\n`,
+    `Total sub-phases: ${total}, Found: ${found}, Missing: ${missing.length}\n\n---\n`,
   ];
 
   for (const file of files) {
@@ -44,7 +66,7 @@ function assembleResults(phaseNum, cwd = process.cwd()) {
 
   const assembled = parts.join('\n');
   writeFile(ASSEMBLED_FILE, assembled, cwd);
-  return assembled;
+  return { content: assembled, missing, total, found };
 }
 
 function writePhaseSummary(phaseNum, content, cwd = process.cwd()) {

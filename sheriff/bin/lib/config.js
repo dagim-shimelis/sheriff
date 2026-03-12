@@ -37,21 +37,46 @@ const CONFIG_VERSION_REGISTRY = {
       'models.light', 'models.medium', 'models.heavy',
     ],
   },
-  // Version 2 — example: add new fields here when needed
-  // 2: {
-  //   description: 'Added coverage thresholds and notification preferences',
-  //   fields: ['coverageThreshold', 'notifications.onComplete', 'notifications.onFailure'],
-  // },
 };
 
 function getConfigPath(cwd = process.cwd()) {
   return path.join(cwd, CONFIG_FILE);
 }
 
+/**
+ * Deep-merges default values into a config object for any missing fields.
+ * Does NOT overwrite existing values — only fills in undefined ones.
+ * Does NOT write the result back to disk.
+ */
+function mergeDefaults(cfg) {
+  const defaults = getDefault();
+
+  function merge(target, source) {
+    for (const key of Object.keys(source)) {
+      if (target[key] === undefined) {
+        target[key] = source[key];
+      } else if (
+        source[key] !== null &&
+        typeof source[key] === 'object' &&
+        !Array.isArray(source[key]) &&
+        target[key] !== null &&
+        typeof target[key] === 'object' &&
+        !Array.isArray(target[key])
+      ) {
+        merge(target[key], source[key]);
+      }
+    }
+    return target;
+  }
+
+  return merge(cfg, defaults);
+}
+
 function readConfig(cwd = process.cwd()) {
   const file = getConfigPath(cwd);
   if (!fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+  const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return mergeDefaults(cfg);
 }
 
 function writeConfig(config, cwd = process.cwd()) {
@@ -116,9 +141,6 @@ function getNestedValue(obj, dotPath) {
 /**
  * Checks the stored config version against CURRENT_CONFIG_VERSION.
  * Returns an object describing what needs migration.
- *
- * @param {string} cwd - working directory
- * @returns {{ needsMigration: boolean, storedVersion: number, currentVersion: number, missingFields: string[], newVersions: number[] }}
  */
 function checkConfigVersion(cwd = process.cwd()) {
   const cfg = readConfig(cwd);
@@ -180,5 +202,5 @@ function checkConfigVersion(cwd = process.cwd()) {
 
 module.exports = {
   readConfig, writeConfig, configExists, getDefault, getConfigPath,
-  checkConfigVersion, CURRENT_CONFIG_VERSION, CONFIG_VERSION_REGISTRY,
+  checkConfigVersion, mergeDefaults, CURRENT_CONFIG_VERSION, CONFIG_VERSION_REGISTRY,
 };

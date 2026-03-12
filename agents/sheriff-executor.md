@@ -34,6 +34,20 @@ node {SHERIFF_TOOLS} claim-subphase {subphaseId} {agentId} --raw
 
 If result.success is false, stop immediately — another agent has this sub-phase.
 
+## Step 1b — Check for existing handoff
+
+```bash
+node {SHERIFF_TOOLS} read-handoff {subphaseId} --raw
+```
+
+If a handoff exists for this sub-phase, read it carefully:
+- Check if a partial test file was already written (read the file path from the handoff)
+- If the partial file exists and has valid content, switch to **update mode** — do NOT overwrite it
+- Resume from the "Next task" section of the handoff
+- Skip the git checkpoint if the handoff says work was already committed
+
+If no handoff exists, proceed normally.
+
 ## Step 2 — Git checkpoint
 
 ```bash
@@ -121,6 +135,13 @@ If tests are still failing after all attempts, commit with the skip annotations:
 node {SHERIFF_TOOLS} git-commit {subphaseId} "{N} passing, {M} skipped for review" --raw
 ```
 
+Check the result of git-commit. If `result.success` is false, do NOT proceed to mark-complete with 'pass'. Instead, attempt `git-rollback` and retry the commit once:
+```bash
+node {SHERIFF_TOOLS} git-rollback {subphaseId} --raw
+node {SHERIFF_TOOLS} git-commit {subphaseId} "{message}" --raw
+```
+If the retry still fails, mark-complete with 'review' and note the git error in the result report.
+
 ## Step 8 — Write result report
 
 Pipe the following to sheriff-tools:
@@ -136,6 +157,7 @@ Result report format:
 **File**: {testFilePath}
 **Tests**: {N} passing, {M} skipped, {K} failed
 **Source**: {sourceFilePath}
+**Commit**: ✅ committed | ❌ commit failed — {reason}
 **Audited**: yes | no
 
 ### What was tested
@@ -151,7 +173,22 @@ Result report format:
 {anything worth surfacing in the phase summary}
 ```
 
-## Step 9 — Mark complete
+## Step 9 — Update TEST_MAP.md
+
+Update the test map to reflect the new coverage. This keeps TEST_MAP.md as a reliable source of truth.
+
+```bash
+node {SHERIFF_TOOLS} update-testmap {sourceFile} unit|e2e tested|review|failed --raw
+```
+
+- Use `tested` if the test file was written and at least one test is passing
+- Use `review` if tests were written but some are skipped/need review
+- Use `failed` if the test file could not be created at all
+- Use `unit` or `e2e` to match the sub-phase test type
+
+The `{sourceFile}` must match the file path as it appears in the TEST_MAP.md Coverage Map table.
+
+## Step 10 — Mark complete
 
 ```bash
 node {SHERIFF_TOOLS} mark-complete {subphaseId} pass|review|fail --raw
@@ -175,7 +212,7 @@ If you are approaching context limits (the context monitor hook will warn you):
 - At 85%: write the handoff note immediately:
 
 ```bash
-node {SHERIFF_TOOLS} write-handoff {agentId} --raw << 'EOF'
+node {SHERIFF_TOOLS} write-handoff {subphaseId} --raw << 'EOF'
 # Sheriff Handoff — executor: {subphaseId}
 compaction_trigger: context_threshold_85
 timestamp: {ISO timestamp}
@@ -208,5 +245,6 @@ Then mark-complete with "review" result so the orchestrator can re-queue.
 - At least one test is passing (not all skipped)
 - Result report written to .sheriff/results/
 - Sub-phase marked complete in PHASES.md
+- TEST_MAP.md updated to reflect coverage
 - Git commit exists for this sub-phase
 </success_criteria>
