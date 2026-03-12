@@ -29,6 +29,7 @@ Task(
 
     Show the user what is currently set, then ask if they want to change each setting.
     Write the updated config to .sheriff/.sheriff.json when done.
+    Make sure to set configVersion to the current version (get from check-config-version --raw → currentVersion).
 
     Sheriff tools: {SHERIFF_TOOLS}
   "

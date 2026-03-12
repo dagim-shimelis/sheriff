@@ -1,7 +1,7 @@
 ---
 name: sheriff:run
 description: Run or resume the full Sheriff pipeline — discover untested code, plan phases, write tests, fix failures, and report results. Fire and forget.
-argument-hint: "[--phase <N>] [--from-scratch]"
+argument-hint: "[--phase <N>] [--from-scratch] [--audit] [--no-audit]"
 allowed-tools:
   - Read
   - Write
@@ -22,6 +22,8 @@ Check which exists and use that path as {SHERIFF_TOOLS}.
 
 If --from-scratch flag is set, delete .sheriff/TEST_MAP.md and .sheriff/PHASES.md before starting.
 If --phase N is set, skip to Phase C targeting that specific phase.
+If --audit flag is set, enable audit mode (skip the audit prompt, go straight to audit+test).
+If --no-audit flag is set, disable audit mode (skip the audit prompt, go straight to test-only).
 </execution_context>
 
 <process>

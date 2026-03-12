@@ -48,6 +48,44 @@ Task(
 
 - Wait for completion before continuing
 
+### Config version check
+
+If .sheriff.json exists, check whether it needs migration:
+
+```bash
+node {SHERIFF_TOOLS} check-config-version --raw
+```
+
+If exit code 1 (`needsMigration: true`), the stored config is outdated or has missing fields.
+Read the JSON output — it contains `missingFields` (array of dot-notation field paths) and
+`storedVersion` / `currentVersion` numbers.
+
+Spawn the interrogator in **migration mode** to ask only about new/missing settings:
+
+```
+Task(
+  subagent_type="sheriff-interrogator",
+  model="inherit",
+  prompt="
+    Run config MIGRATION (not full onboarding).
+    The user's config is from version {storedVersion}, current is {currentVersion}.
+
+    Missing fields that need answers:
+    {missingFields as JSON array}
+
+    IMPORTANT: Do NOT re-ask questions the user has already answered.
+    Only ask about the missing fields listed above.
+    After answering, update .sheriff.json with the new values and set configVersion to {currentVersion}.
+
+    Sheriff tools: {SHERIFF_TOOLS}
+  "
+)
+```
+
+Wait for completion before continuing.
+
+### Status
+
 ```bash
 node {SHERIFF_TOOLS} get-status --raw
 ```
@@ -98,6 +136,24 @@ Wait for completion. Validate .sheriff/PHASES.md now exists.
 
 ## Phase C — Execution (main loop)
 
+### Audit mode prompt
+
+Before starting execution, ask the user:
+
+```
+Sheriff can run in two modes:
+
+1. **Audit + Test** — Review source code for bugs, security issues, and dead code BEFORE writing tests. Fixes issues first so tests validate correct behavior.
+2. **Test only** — Write tests directly against existing source code (faster, but tests may codify existing bugs).
+
+Which mode? (1 or 2)
+```
+
+Wait for the user's response. Set `{AUDIT_MODE}` to `true` if they choose 1, `false` if they choose 2.
+
+If the `--audit` flag was passed to the run command, skip the prompt and set `{AUDIT_MODE}` to `true`.
+If the `--no-audit` flag was passed, skip the prompt and set `{AUDIT_MODE}` to `false`.
+
 Determine the current phase number from PHASES.md (first phase with [ ] status).
 
 ### Watchdog setup
@@ -117,6 +173,61 @@ node {SHERIFF_TOOLS} release-subphase {subphaseId} --raw
 Parse PHASES.md for the current phase. Group sub-phases by wave number.
 Start with wave 1.
 
+### Spawn auditors (if audit mode)
+
+If `{AUDIT_MODE}` is `true`, spawn auditor agents for each sub-phase in the current wave BEFORE spawning executors.
+
+For each sub-phase in the current wave (up to maxParallelAgents), using `config.models.heavy`:
+
+```
+Task(
+  subagent_type="sheriff-auditor",
+  model="{config.models.heavy}",
+  prompt="
+    Audit the source file for sub-phase {subphaseId}.
+
+    <files_to_read>
+    - .sheriff/PHASES.md
+    - .sheriff/.sheriff.json
+    - .sheriff/TEST_MAP.md
+    - {sourceFile}
+    </files_to_read>
+
+    Sub-phase: {subphaseId}
+    Source file: {sourceFile}
+    Sheriff tools: {SHERIFF_TOOLS}
+  "
+)
+```
+
+Run all auditor tasks in parallel. Wait for ALL auditors in the wave to complete before spawning executors. This ensures executors test the corrected source code.
+
+Create the `.sheriff/audits/` directory if it doesn't exist:
+```bash
+mkdir -p .sheriff/audits
+```
+
+### Pre-check: detect existing test files (CRITICAL — prevents duplicates)
+
+Before spawning executors, check for existing test files for each sub-phase in the wave.
+
+For each sub-phase, get the `file:` field from PHASES.md (the target test file path) and the `source:` field.
+
+**Check if a test file already exists** for this source file:
+
+1. Check the exact `file:` path from PHASES.md
+2. Glob for `tests/**/*{sourceBasename}*.test.{js,ts}` and `tests/**/*{sourceBasename}*.spec.{js,ts}`
+3. Check TEST_MAP.md for any existing test mapping
+
+If an existing test file is found:
+- Set `{existingTestFile}` to that path
+- Set `{executorMode}` to `"update"` — the executor must UPDATE the existing file, not create a new one
+- The PHASES.md `file:` path should be overridden with the existing test file path
+
+If no existing test file is found:
+- Set `{existingTestFile}` to `"NONE"`
+- Set `{executorMode}` to `"create"`
+
 ### Spawn executors in parallel
 
 For each sub-phase in the current wave (up to maxParallelAgents), using `config.models.heavy`:
@@ -133,6 +244,8 @@ Task(
     - .sheriff/.sheriff.json
     - .sheriff/TEST_MAP.md
     - {sourceFile}
+    - {existingTestFile} (if mode is update — READ THIS FIRST before writing)
+    - .sheriff/audits/{subphaseId}.md (if audit mode — read for context on fixes applied)
     </files_to_read>
 
     Sub-phase: {subphaseId}
@@ -140,6 +253,14 @@ Task(
     Sheriff tools: {SHERIFF_TOOLS}
     Test runners: {config.testRunners}
     Test run command: {testRunCommand}
+    Audit mode: {AUDIT_MODE}
+    Executor mode: {executorMode}
+    Existing test file: {existingTestFile}
+
+    CRITICAL: If executor mode is 'update', you MUST edit the existing test file
+    at {existingTestFile}. Do NOT create a new test file. Add new test cases to
+    the existing file's structure. If the existing file already covers some test
+    cases from the sub-phase checklist, skip those — do not duplicate them.
   "
 )
 ```

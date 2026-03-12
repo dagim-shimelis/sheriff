@@ -49,19 +49,42 @@ Read the source file carefully. Identify:
 - Side effects, async operations, external dependencies
 - Existing mock patterns from TEST_MAP.md "Mock Patterns" section
 
+If **audit mode is enabled**, also read `.sheriff/audits/{subphaseId}.md` for context on any fixes applied by the auditor. Pay attention to:
+- "Notes for executor" section — behavioral changes that affect test expectations
+- "Critical Issues" and "Warnings" — understand what was fixed so your tests validate the corrected behavior
+- "Unfixed Items" — consider adding test.skip cases that document known issues
+
 Do NOT re-scan the whole codebase. TEST_MAP.md has everything you need.
 
-## Step 4 — Write the test file
+## Step 4 — Write or update the test file
+
+Check executor mode: **create** or **update**.
+
+### Create mode (no existing test)
 
 Follow the test cases listed in the sub-phase block from PHASES.md.
 Use the mock patterns documented in TEST_MAP.md — do not invent new patterns.
 
-Rules:
+### Update mode (existing test file — CRITICAL)
+
+**NEVER create a new test file when one already exists.** Read the existing test file first.
+
+1. Identify what the existing file already tests (list all describe/test blocks)
+2. Compare against the sub-phase checklist from PHASES.md
+3. For test cases already covered → skip them entirely, do not duplicate
+4. For new test cases not yet covered → add them to the appropriate describe block
+5. For test cases that cover changed behavior → update the existing test assertions
+6. Use the Edit tool to modify the existing file — do not overwrite it with Write
+
+If the existing file's imports, mocks, or setup need changes to support new tests, modify them carefully without breaking existing passing tests.
+
+### Rules (both modes)
 - Match the project's existing test style exactly
 - For Vue/Nuxt: use mountHelpers if they exist in tests/setup/
 - For stores: use @pinia/testing createTestingPinia
 - For composables: test in isolation with mocked dependencies
 - Mark infeasible tests (require external services, real tokens) with test.skip and a comment
+- **ABSOLUTE RULE: One source file = one test file. Never create duplicates.**
 
 ## Step 5 — Run the tests
 
@@ -113,9 +136,13 @@ Result report format:
 **File**: {testFilePath}
 **Tests**: {N} passing, {M} skipped, {K} failed
 **Source**: {sourceFilePath}
+**Audited**: yes | no
 
 ### What was tested
 {brief description}
+
+### Audit context (if audited)
+{summary of fixes from audit report that informed test expectations — or "N/A"}
 
 ### Issues encountered
 {any bugs found, skipped tests, and why}

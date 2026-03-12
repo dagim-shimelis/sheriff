@@ -25,9 +25,11 @@ npx @dagim_s/sheriff
 
 ## What is Sheriff?
 
-Sheriff is a Claude Code plugin that **automatically discovers, plans, writes, fixes, and commits tests** for any JavaScript or TypeScript project — with zero configuration required.
+Sheriff is a Claude Code plugin that **automatically discovers, plans, writes, fixes, and commits tests** for any JavaScript or TypeScript project — with zero configuration required. It also **audits source code** for bugs and security issues before writing tests, and **keeps tests in sync** as your code evolves.
 
 Point it at your codebase, run one command, and walk away. Sheriff interrogates your project structure, finds every untested file and function, groups work into risk-ordered phases, dispatches parallel executor agents to write real tests against your actual framework, auto-fixes failures (up to 3 attempts per suite), and commits everything with a structured summary. No test templates, no manual configuration, no babysitting — just coverage where there was none.
+
+After initial test generation, use `/sheriff:sync` to keep tests up to date as you modify source code. Sync audits your changes for bugs and security issues by default, fixes problems, then updates affected tests to match the corrected behavior — so your tests never codify broken code.
 
 Sheriff is built on Claude Code's multi-agent plugin system. It installs as a first-class plugin with slash commands, sub-agents, and lifecycle hooks. It works with whatever test runner and framework your project already uses — or sets one up for you if you don't have one yet.
 
@@ -66,7 +68,7 @@ Open Claude Code in your project, then run:
 
 Sheriff handles everything from here. It onboards itself to your project, sets up test runners if needed, scans your source tree, plans a phased test strategy, writes and runs the tests, fixes failures, and commits results — all autonomously.
 
-> Sheriff installs as a Claude Code plugin, giving it access to slash commands (`/sheriff:run`, `/sheriff:status`, `/sheriff:configure`, `/sheriff:reset`, `/sheriff:update`), dedicated sub-agents for each stage of the pipeline, and lifecycle hooks that coordinate the multi-agent workflow.
+> Sheriff installs as a Claude Code plugin, giving it access to slash commands (`/sheriff:run`, `/sheriff:sync`, `/sheriff:audit`, `/sheriff:status`, `/sheriff:configure`, `/sheriff:reset`, `/sheriff:update`), dedicated sub-agents for each stage of the pipeline, and lifecycle hooks that coordinate the multi-agent workflow.
 
 ---
 
@@ -117,12 +119,25 @@ Sheriff runs a seven-stage pipeline. Each stage is handled by a dedicated agent.
                              │
                              ▼
           ┌────────────────────────────────────────┐
-          │  STAGE C · Execution                   │
+          │  STAGE C1 · Audit (optional)           │
+          │  sheriff-auditor  (parallel)           │
+          │                                        │
+          │  For each sub-phase (if audit mode):   │
+          │  • Reviews source for bugs & security  │
+          │  • Fixes critical/warning issues       │
+          │  • Writes audit report                 │
+          │  • Commits source fixes                │
+          └──────────────────┬─────────────────────┘
+                             │
+                             ▼
+          ┌────────────────────────────────────────┐
+          │  STAGE C2 · Execution                  │
           │  sheriff-executor  (parallel)          │
           │                                        │
           │  For each sub-phase:                   │
+          │  • Checks for existing test (no dupes) │
           │  • Claims sub-phase (lock file)        │
-          │  • Writes tests using correct runner   │
+          │  • Writes or updates tests             │
           │  • Runs test suite                     │
           │  • Fixes failures (up to 3 attempts)   │
           │  • Commits passing tests               │
@@ -214,14 +229,16 @@ Sheriff installs the right companion packages for your stack:
 
 ## The Agent Architecture
 
-Sheriff is composed of five specialized agents. Each agent has a defined role, a color-coded identity in logs, and a model profile matched to its computational demands.
+Sheriff is composed of seven specialized agents. Each agent has a defined role, a color-coded identity in logs, and a model profile matched to its computational demands.
 
 | Agent | Role | Produces | Model Tier |
 |---|---|---|---|
 | `sheriff-interrogator` | Onboards to the project — detects framework, recommends and configures test runners, validates setup, confirms scope with the user | `.sheriff.json` | Medium (default: Sonnet) |
 | `sheriff-discovery` | Scans all source files against existing tests, flags every untested file and function, respects test type settings, builds the full coverage gap map | `TEST_MAP.md` | Light (default: Haiku) |
 | `sheriff-planner` | Reads the gap map, groups work by risk/domain/complexity, plans only enabled test types, assigns files to ordered waves, produces the phased execution plan | `PHASES.md` | Medium (default: Sonnet) |
-| `sheriff-executor` | Claims a sub-phase, writes tests using the correct runner (unit or E2E), runs the suite, auto-fixes failures (up to 3 rounds), commits passing tests — the primary workhorse | per-phase commit | Heavy (default: Opus) |
+| `sheriff-auditor` | Reviews source code for bugs, security issues, dead code, and race conditions. Fixes critical/warning issues before tests are written so tests validate correct behavior | audit reports + source fixes | Heavy (default: Opus) |
+| `sheriff-executor` | Claims a sub-phase, checks for existing tests (never creates duplicates), writes or updates tests using the correct runner (unit or E2E), runs the suite, auto-fixes failures (up to 3 rounds), commits passing tests — the primary workhorse | per-phase commit | Heavy (default: Opus) |
+| `sheriff-syncer` | Detects source code changes, finds corresponding test files, runs them, and updates failing tests to match new source behavior. Handles both existing test updates and new test creation | updated test files | Heavy (default: Opus) |
 | `sheriff-reporter` | Collects results from all executor runs, assembles structured phase summaries, calculates coverage delta | phase summary reports | Light (default: Haiku) |
 
 ### Model Profiles
@@ -232,7 +249,7 @@ Sheriff uses three configurable **model tiers** to balance cost and capability. 
 |------|---------|--------|---------|
 | **Light** | Haiku | discovery, reporter | File scanning, report assembly — high volume, no deep reasoning needed |
 | **Medium** | Sonnet | interrogator, planner | Reasoning about project structure, risk assessment, phase ordering |
-| **Heavy** | Opus | executor | Core work — writing, running, and fixing tests. Most important agent |
+| **Heavy** | Opus | executor, auditor, syncer | Core work — auditing source code, writing/updating tests. Most important agents |
 
 Configure in `.sheriff.json`:
 
@@ -252,7 +269,7 @@ Want to run everything on Opus for maximum quality? Set all three tiers to `"opu
 
 ## Commands
 
-Sheriff exposes five slash commands inside Claude Code. All commands are available globally after a global install, or project-scoped after a local install.
+Sheriff exposes eight slash commands inside Claude Code. All commands are available globally after a global install, or project-scoped after a local install.
 
 ---
 
@@ -264,14 +281,20 @@ On every run, Sheriff checks for available updates and shows a non-blocking noti
 
 ```
 /sheriff:run
+/sheriff:run --audit
+/sheriff:run --no-audit
 /sheriff:run --phase 3
 /sheriff:run --from-scratch
 ```
 
 | Flag | Description |
 |------|-------------|
+| `--audit` | Audit source code for bugs/security issues before writing tests. Fixes issues first so tests validate correct behavior. Skips the mode prompt. |
+| `--no-audit` | Write tests directly without auditing (faster). Skips the mode prompt. |
 | `--phase <N>` | Skip discovery and planning; jump directly to executing phase N. Useful for re-running a specific phase after a manual fix. |
 | `--from-scratch` | Delete `TEST_MAP.md` and `PHASES.md` before starting, forcing a full re-discovery and re-plan. Written test files are never touched. |
+
+When run without `--audit` or `--no-audit`, Sheriff prompts you to choose between audit+test mode and test-only mode.
 
 **Examples:**
 
@@ -279,11 +302,103 @@ On every run, Sheriff checks for available updates and shows a non-blocking noti
 # First run — onboard, discover, plan, and execute everything
 /sheriff:run
 
+# Audit source code first, then write tests against corrected behavior
+/sheriff:run --audit
+
 # Re-run only phase 2 (e.g., after manually editing a source file)
 /sheriff:run --phase 2
 
 # Re-discover the whole codebase (e.g., after adding many new files)
 /sheriff:run --from-scratch
+```
+
+---
+
+### `/sheriff:sync`
+
+Detect source code changes, audit them for quality issues (by default), and update affected tests to match new behavior. This is your day-to-day command after modifying source code.
+
+```
+/sheriff:sync
+/sheriff:sync --no-audit
+/sheriff:sync --since-branch main
+/sheriff:sync --staged
+/sheriff:sync --since-commit abc123
+/sheriff:sync --files stores/inbox.js,composables/useAPI.js
+```
+
+| Flag | Description |
+|------|-------------|
+| `--no-audit` | Skip the audit step — just sync tests to match changed source (faster). |
+| `--since-branch <branch>` | Diff against a branch (e.g., `main`). Useful before opening a PR. |
+| `--staged` | Only look at staged changes. |
+| `--since-commit <sha>` | Diff against a specific commit. |
+| `--files <paths>` | Sync specific files (comma-separated). Skips git diff detection. |
+| *(no flag)* | Auto-detect changes via `git diff HEAD~1` (last commit). |
+
+**How sync works:**
+
+1. Detects changed source files via git diff
+2. Maps each changed file to its existing test file (TEST_MAP, PHASES, convention-based, or import-based discovery)
+3. Audits changed files for bugs, security issues, dead code (default — skip with `--no-audit`)
+4. Runs affected tests to see what's broken
+5. Spawns sync agents to update failing tests or create missing tests
+6. Commits test updates
+
+**Examples:**
+
+```
+# After modifying source code — audit changes + update tests
+/sheriff:sync
+
+# Quick sync without audit
+/sheriff:sync --no-audit
+
+# Before a PR — audit + sync everything since branching from main
+/sheriff:sync --since-branch main
+
+# Sync specific files
+/sheriff:sync --files stores/inbox.js,composables/useAPI.js
+```
+
+---
+
+### `/sheriff:audit`
+
+Standalone source code audit. Reviews code for bugs, security issues, and dead code — not scoped to recent changes. Fixes issues found, then updates existing tests to match corrected behavior.
+
+```
+/sheriff:audit
+/sheriff:audit --files stores/inbox.js,composables/useAPI.js
+/sheriff:audit --phase 3
+```
+
+| Flag | Description |
+|------|-------------|
+| `--files <paths>` | Audit specific source files (comma-separated). |
+| `--phase <N>` | Audit all source files in a specific phase from PHASES.md. |
+| *(no flag)* | Audit all source files listed in TEST_MAP.md or PHASES.md. |
+
+**What the auditor checks:**
+
+- **Bugs**: undeclared/unused variables, dead code paths, race conditions, broken reactive chains, swallowed errors
+- **Security**: XSS vectors, injection risks, sensitive data exposure, missing input validation
+- **Dead code**: unused imports, variables, functions, computed properties
+- **Logic**: incorrect operators, missing edge cases, API response shape mismatches
+
+Critical and warning issues are fixed in source. Info-level issues are documented but not modified. After fixes, affected tests are automatically synced.
+
+**Examples:**
+
+```
+# Audit entire codebase
+/sheriff:audit
+
+# Audit specific files
+/sheriff:audit --files stores/inbox.js,composables/useAPI.js
+
+# Audit all files in phase 2
+/sheriff:audit --phase 2
 ```
 
 ---
@@ -459,6 +574,12 @@ Sheriff stores all of its state in a `.sheriff/` directory at your project root.
 │   ├── 1.1.md
 │   ├── 1.2.md
 │   └── ...
+├── audits/                # Source code audit reports (audit mode)
+│   ├── 1.1.md
+│   └── ...
+├── sync/                  # Test sync reports (/sheriff:sync)
+│   ├── inbox.md
+│   └── ...
 ├── summaries/             # Phase summary reports
 │   ├── phase-1.md
 │   ├── phase-2.md
@@ -478,6 +599,10 @@ Sheriff stores all of its state in a `.sheriff/` directory at your project root.
 
 **`results/`** — One report file per sub-phase, written by executor agents after each sub-phase completes. Contains test counts, pass/fail breakdown, retry history, and any notes for flagged items.
 
+**`audits/`** — One report file per source file, written by auditor agents during audit mode. Contains categorized issues found (critical, warning, info), fixes applied, and notes for the executor/syncer about corrected behavior.
+
+**`sync/`** — One report file per synced source file, written by syncer agents during `/sheriff:sync`. Contains detected source changes, test updates applied, new tests added, and items that need manual review.
+
 **`summaries/`** — One summary file per phase, written by the reporter agent. Aggregates all sub-phase results for the phase into a structured report with coverage delta, pass rate, and a list of items needing review.
 
 **`handoffs/`** — Context handoff notes written by executor agents when approaching context window limits. Allow long-running phases to be resumed cleanly by a fresh agent instance without losing progress.
@@ -485,6 +610,43 @@ Sheriff stores all of its state in a `.sheriff/` directory at your project root.
 ---
 
 ## Smart Features
+
+### Audit-First Testing
+
+When audit mode is enabled (default in `/sheriff:sync`, optional in `/sheriff:run`), Sheriff reviews source code **before** writing tests against it. This prevents tests from codifying existing bugs.
+
+The auditor checks for:
+- **Bugs**: undeclared variables, dead code paths, race conditions, broken reactive chains (e.g., watching non-reactive values in Vue), swallowed promise errors
+- **Security**: XSS vectors (v-html with user input), injection risks, sensitive data exposure, missing input validation at boundaries
+- **Dead code**: unused imports, variables, functions, computed properties, orphaned event handlers
+- **Logic issues**: incorrect operators, missing edge cases, API response shape mismatches
+
+Critical and warning issues are fixed in source automatically. Tests are then written against the corrected behavior, not the buggy original.
+
+### No Duplicate Tests
+
+Sheriff checks for existing test files before writing anything. If a test already exists for a source file, it **updates the existing test** — never creates a second one. This applies across all commands (`/sheriff:run`, `/sheriff:sync`, `/sheriff:audit`).
+
+Detection strategies (in priority order):
+1. **TEST_MAP.md** lookup — cross-reference the coverage map
+2. **PHASES.md** lookup — source-to-test field mapping
+3. **Convention-based** — `stores/foo.js` → `tests/unit/stores/foo.test.js`
+4. **Import-based** — grep test files for imports of the source file
+
+When updating an existing test, executors read the file first, identify what's already covered, skip duplicates, and only add missing test cases or update assertions for changed behavior.
+
+### Test Sync
+
+`/sheriff:sync` is a lightweight command designed for everyday use after modifying source code. It:
+
+1. Detects what changed via `git diff`
+2. Maps changed files to their test files
+3. Audits the changes (default, skip with `--no-audit`)
+4. Runs a quick check to see which tests actually break
+5. Only spawns sync agents for broken/missing tests
+6. Commits updated tests
+
+This makes it efficient even for large codebases — if your change doesn't break any tests, sync finishes in seconds.
 
 ### Wave-Based Parallelism
 
@@ -543,7 +705,7 @@ Running `npx @dagim_s/sheriff` copies Sheriff's components into your Claude Code
 | Component | Source | Destination (global) | Destination (local) |
 |-----------|--------|----------------------|---------------------|
 | Slash commands | `commands/sheriff/` | `~/.claude/commands/sheriff/` | `.claude/commands/sheriff/` |
-| Sub-agents | `agents/sheriff-*.md` | `~/.claude/agents/` | `.claude/agents/` |
+| Sub-agents (7) | `agents/sheriff-*.md` | `~/.claude/agents/` | `.claude/agents/` |
 | Hooks | `hooks/dist/sheriff-*.js` | `~/.claude/hooks/` | `.claude/hooks/` |
 | Tools & workflows | `sheriff/` | `~/.claude/sheriff/` | `.claude/sheriff/` |
 | Hook config | auto-injected | `~/.claude/settings.json` | `.claude/settings.json` |
@@ -607,5 +769,7 @@ A few areas where help would be especially valuable:
 - **E2E patterns** — deeper Playwright and Cypress test generation strategies
 - **Monorepo handling** — smarter scoping for pnpm/yarn/Nx workspaces
 - **Runner config templates** — more framework-specific minimal configs
+- **Audit rules** — additional security and quality checks for the auditor agent
+- **Sync strategies** — smarter test update heuristics for complex refactors
 
 If you're building on top of Sheriff or integrating it into a larger workflow, feel free to open a discussion — feedback on the agent API shapes the roadmap.

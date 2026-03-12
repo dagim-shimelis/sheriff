@@ -73,10 +73,20 @@ Just run the command and walk away.
 | Command | What it does |
 |---------|-------------|
 | `/sheriff:run` | Run or resume the full pipeline. Start here. |
+| `/sheriff:run --audit` | Audit source code for bugs/security issues before writing tests. |
+| `/sheriff:run --no-audit` | Skip audit, write tests directly (faster). |
 | `/sheriff:run --phase 3` | Re-execute only phase 3 (skip discovery and planning). |
 | `/sheriff:run --from-scratch` | Re-discover and re-plan from zero. Keeps existing test files. |
 | `/sheriff:status` | Show progress — phases complete, tests passing, items needing review. |
 | `/sheriff:configure` | Re-run onboarding to change settings (runners, test types, strategy, etc). |
+| `/sheriff:audit` | Audit source code for bugs/security, fix issues, then update affected tests. |
+| `/sheriff:audit --files stores/inbox.js` | Audit specific files only. |
+| `/sheriff:audit --phase 3` | Audit all source files in a specific phase. |
+| `/sheriff:sync` | Audit changed code + update tests (default: audits first). |
+| `/sheriff:sync --no-audit` | Skip audit, just sync tests to match changed source. |
+| `/sheriff:sync --since-branch main` | Audit + sync all changes since diverging from main. |
+| `/sheriff:sync --staged` | Audit + sync staged changes only. |
+| `/sheriff:sync --since-commit abc123` | Audit + sync changes since a specific commit. |
 | `/sheriff:reset` | Delete Sheriff state (`.sheriff/` dir). Never deletes your test files. |
 | `/sheriff:reset --discovery-only` | Clear only TEST_MAP.md and PHASES.md — keeps tests and summaries. |
 | `/sheriff:update` | Check for and install the latest version from npm. |
@@ -101,6 +111,9 @@ Sheriff runs a multi-stage pipeline, each handled by a dedicated agent:
 [Stage B] Planner        — Groups files into risk-ordered phases → PHASES.md
     |
     v
+[Stage C] Auditors       — (audit mode) Review source code, fix bugs before testing
+    |
+    v
 [Stage C] Executors      — Write tests in parallel waves, auto-fix failures, commit
     |
     v
@@ -114,13 +127,14 @@ Sheriff runs a multi-stage pipeline, each handled by a dedicated agent:
 
 ### Agents
 
-Sheriff uses 5 specialized agents. Each has a dedicated role:
+Sheriff uses 6 specialized agents. Each has a dedicated role:
 
 | Agent | Role | What it produces |
 |-------|------|-----------------|
 | **Interrogator** | Detects framework, sets up test runners, writes config | `.sheriff.json` |
 | **Discovery** | Scans source files, identifies test gaps | `TEST_MAP.md` |
 | **Planner** | Groups work into risk/domain/complexity phases | `PHASES.md` |
+| **Auditor** | Reviews source code for bugs, security issues, dead code (audit mode only) | Audit reports + source fixes |
 | **Executor** | Writes tests, runs them, fixes failures, commits | Test files + commits |
 | **Reporter** | Aggregates results, calculates coverage delta | Phase summary reports |
 
@@ -182,6 +196,31 @@ After first run, config lives at `.sheriff/.sheriff.json`. Edit directly or use 
 /sheriff:run
 ```
 
+**After modifying source code — audit + sync tests:**
+```
+/sheriff:sync
+```
+
+**Quick sync without audit:**
+```
+/sheriff:sync --no-audit
+```
+
+**Before a PR — audit + sync all changes against main:**
+```
+/sheriff:sync --since-branch main
+```
+
+**Audit entire codebase (not just changed files):**
+```
+/sheriff:audit
+```
+
+**Audit specific files:**
+```
+/sheriff:audit --files stores/inbox.js,composables/useAPI.js
+```
+
 **Start completely fresh:**
 ```
 /sheriff:reset
@@ -205,6 +244,7 @@ All Sheriff state lives in `.sheriff/` at your project root:
 ├── TEST_MAP.md        — Source-to-test coverage map
 ├── PHASES.md          — Execution plan with phase/wave assignments
 ├── results/           — Per-sub-phase result reports
+├── audits/            — Per-sub-phase source code audit reports (audit mode only)
 ├── summaries/         — Per-phase summary reports
 └── handoffs/          — Context handoff notes for long phases
 ```

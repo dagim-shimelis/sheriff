@@ -26,6 +26,7 @@
  *   read-config                   Print current .sheriff.json
  *   write-config                  Read config JSON from stdin and write
  *   config-exists                 Exit 0 if .sheriff.json exists, 1 otherwise
+ *   check-config-version          Compare stored config version against current, report missing fields
  *   print-banner                  Print the Sheriff ASCII banner with version
  *   check-update                  Check npm for newer version, exit 0 if up-to-date, 1 if update available
  *   current-version               Print the currently installed version
@@ -236,6 +237,14 @@ switch (command) {
 
   case 'config-exists': {
     process.exit(config.configExists(cwd) ? 0 : 1);
+    break; // unreachable, but prevents fall-through if process.exit is refactored
+  }
+
+  case 'check-config-version': {
+    const result = config.checkConfigVersion(cwd);
+    out(result);
+    process.exit(result.needsMigration ? 1 : 0);
+    break;
   }
 
   case 'print-banner': {
@@ -262,6 +271,7 @@ switch (command) {
       out({ currentVersion, latestVersion: null, updateAvailable: false, error: e.message });
       process.exit(0);
     }
+    break;
   }
 
   case 'current-version': {
