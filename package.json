@@ -28,6 +28,7 @@
     "agents/",
     "hooks/dist/",
     "sheriff/",
+    "workflows/",
     "scripts/"
   ]
 }
