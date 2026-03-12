@@ -42,6 +42,19 @@ const git = require('./lib/git');
 const results = require('./lib/results');
 const { printBanner } = require('./lib/banner');
 
+function findPackageJson() {
+  let dir = __dirname;
+  while (dir !== path.dirname(dir)) {
+    const candidate = path.join(dir, 'package.json');
+    if (fs.existsSync(candidate)) {
+      const pkg = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+      if (pkg.name && pkg.name.includes('sheriff')) return pkg;
+    }
+    dir = path.dirname(dir);
+  }
+  throw new Error('Could not find sheriff package.json');
+}
+
 const args = process.argv.slice(2);
 const rawIndex = args.indexOf('--raw');
 const raw = rawIndex !== -1;
@@ -248,15 +261,16 @@ switch (command) {
   }
 
   case 'print-banner': {
-    const version = require('../../package.json').version;
+    const version = findPackageJson().version;
     printBanner(version);
     break;
   }
 
   case 'check-update': {
     const { execSync } = require('child_process');
-    const currentVersion = require('../../package.json').version;
-    const packageName = require('../../package.json').name;
+    const pkg = findPackageJson();
+    const currentVersion = pkg.version;
+    const packageName = pkg.name;
     try {
       const latest = execSync(`npm view ${packageName} version`, {
         encoding: 'utf8',
@@ -275,7 +289,7 @@ switch (command) {
   }
 
   case 'current-version': {
-    const version = require('../../package.json').version;
+    const version = findPackageJson().version;
     out({ version });
     break;
   }

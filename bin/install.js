@@ -125,7 +125,14 @@ function install(claudeDir, { skipBanner = false } = {}) {
     log(`  ✅ Workflows  → ${workflowsDest}`);
   }
 
-  // 6. Inject hook config into settings.json
+  // 6. Copy package.json so sheriff-tools.js can read version/name
+  const pkgSrc = path.join(PACKAGE_ROOT, 'package.json');
+  const pkgDest = path.join(target, 'package.json');
+  if (fs.existsSync(pkgSrc)) {
+    fs.copyFileSync(pkgSrc, pkgDest);
+  }
+
+  // 7. Inject hook config into settings.json
   injectHookConfig(claudeDir);
 
   const { GOLD, RESET, GRAY, GREEN } = require('../sheriff/bin/lib/banner');
