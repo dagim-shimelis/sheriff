@@ -14,11 +14,8 @@ allowed-tools:
 ---
 
 <execution_context>
-Determine the Sheriff tools path:
-- Global install: ~/.claude/sheriff/bin/sheriff-tools.js
-- Local install: .claude/sheriff/bin/sheriff-tools.js
-
-Check which exists and use that path as {SHERIFF_TOOLS}.
+Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
+Use its runtime paths, tool integration, and install scope.
 
 If --from-scratch flag is set, delete .sheriff/TEST_MAP.md and .sheriff/PHASES.md before starting.
 If --phase N is set, skip to Phase C targeting that specific phase.
@@ -29,5 +26,5 @@ If --no-audit flag is set, disable audit mode (skip the audit prompt, go straigh
 <process>
 Execute the run workflow end-to-end:
 
-@~/.claude/sheriff/workflows/run.md
+Read and follow `{SHERIFF_ROOT}/workflows/run.md`.
 </process>

@@ -14,11 +14,8 @@ allowed-tools:
 ---
 
 <execution_context>
-Determine the Sheriff tools path:
-- Global install: ~/.claude/sheriff/bin/sheriff-tools.js
-- Local install: .claude/sheriff/bin/sheriff-tools.js
-
-Check which exists and use that path as {SHERIFF_TOOLS}.
+Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
+Use its runtime paths, tool integration, and install scope.
 
 Flag handling:
 - --no-audit: skip the audit step, just sync tests directly (faster)
@@ -36,5 +33,5 @@ Audit mode:
 <process>
 Execute the sync workflow end-to-end:
 
-@~/.claude/sheriff/workflows/sync.md
+Read and follow `{SHERIFF_ROOT}/workflows/sync.md`.
 </process>

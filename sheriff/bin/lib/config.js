@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
 
 const CONFIG_FILE = '.sheriff/.sheriff.json';
 

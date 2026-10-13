@@ -6,9 +6,12 @@ allowed-tools:
   - Bash
 ---
 
-<process>
-Determine the Sheriff tools path (global or local).
+<execution_context>
+Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
+Use its runtime paths, tool integration, and install scope.
+</execution_context>
 
+<process>
 Run:
 ```bash
 node {SHERIFF_TOOLS} get-status --raw

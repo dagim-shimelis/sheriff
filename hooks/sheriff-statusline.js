@@ -12,29 +12,33 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const hookData = JSON.parse(process.env.HOOK_DATA || '{}');
-const sessionId = hookData.session_id || 'unknown';
+let hookData;
+try {
+  hookData = JSON.parse(process.env.HOOK_DATA || fs.readFileSync(0, 'utf8'));
+} catch {
+  process.exit(0);
+}
+const sessionId = hookData?.session_id;
+if (typeof sessionId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) process.exit(0);
 const bridgeFile = path.join(os.tmpdir(), `sheriff-ctx-${sessionId}.json`);
 
 // Context window metrics from hook data
-const contextTokensUsed = hookData.context_tokens_used || 0;
-const contextTokensMax = hookData.context_tokens_max || 200000;
-const remainingPercent = Math.round(((contextTokensMax - contextTokensUsed) / contextTokensMax) * 100);
-const usedPercent = 100 - remainingPercent;
+const remaining = hookData.context_window?.remaining_percentage;
+const remainingPercent = typeof remaining === 'number' && Number.isFinite(remaining)
+  ? Math.max(0, Math.min(100, Math.round(remaining))) : null;
+const usedPercent = remainingPercent === null ? null : 100 - remainingPercent;
 
 // Write bridge file for context monitor
 try {
   fs.writeFileSync(bridgeFile, JSON.stringify({
     remainingPercent,
     usedPercent,
-    contextTokensUsed,
-    contextTokensMax,
     timestamp: Date.now(),
   }));
 } catch {}
 
 // Read Sheriff status
-const sheriffDir = path.join(process.cwd(), '.sheriff');
+const sheriffDir = path.join(hookData.cwd || process.cwd(), '.sheriff');
 if (!fs.existsSync(sheriffDir)) {
   // Not a Sheriff project — show nothing
   process.exit(0);
@@ -64,7 +68,7 @@ try {
 
     const parts = [`🔫 Sheriff`];
     if (totalPhases > 0) parts.push(`Phase ${donePhases + 1}/${totalPhases}`);
-    parts.push(`ctx ${bar} ${remainingPercent}%`);
+    if (remainingPercent !== null) parts.push(`ctx ${bar} ${remainingPercent}%`);
     if (running > 0) parts.push(`${running} running`);
     if (passing > 0) parts.push(`${passing}✅`);
     if (review > 0) parts.push(`${review}⚠️`);

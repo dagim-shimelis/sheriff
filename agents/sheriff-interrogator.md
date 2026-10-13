@@ -123,7 +123,7 @@ Run these in parallel. Do NOT ask the user for anything yet.
 
 4. Check for: tsconfig.json, .eslintrc*, tailwind.config.*, nuxt.config.*
 
-5. Read the project's CLAUDE.md or README if present for additional context.
+5. Read the project's AGENTS.md, CLAUDE.md, or README if present for additional context.
 
 ## Step 2 — Build auto-detected values
 
@@ -220,6 +220,8 @@ If user picks "Other":
 - Same validation flow as unit testing: check npm, retry up to 3 times.
 
 ### Remaining questions
+
+Follow the runtime policy: in Codex, skip parallelism/model questions, use sequential execution, and set model tiers to `inherit` for a new config. Preserve existing model choices when reconfiguring shared project state.
 
 ```
 3. Phase strategy — how should Sheriff prioritize what to test first?

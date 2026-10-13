@@ -2,24 +2,28 @@
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
-var hookData = JSON.parse(process.env.HOOK_DATA || "{}");
-var sessionId = hookData.session_id || "unknown";
+var hookData;
+try {
+  hookData = JSON.parse(process.env.HOOK_DATA || fs.readFileSync(0, "utf8"));
+} catch {
+  process.exit(0);
+}
+var sessionId = hookData?.session_id;
+if (typeof sessionId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(sessionId))
+  process.exit(0);
 var bridgeFile = path.join(os.tmpdir(), `sheriff-ctx-${sessionId}.json`);
-var contextTokensUsed = hookData.context_tokens_used || 0;
-var contextTokensMax = hookData.context_tokens_max || 2e5;
-var remainingPercent = Math.round((contextTokensMax - contextTokensUsed) / contextTokensMax * 100);
-var usedPercent = 100 - remainingPercent;
+var remaining = hookData.context_window?.remaining_percentage;
+var remainingPercent = typeof remaining === "number" && Number.isFinite(remaining) ? Math.max(0, Math.min(100, Math.round(remaining))) : null;
+var usedPercent = remainingPercent === null ? null : 100 - remainingPercent;
 try {
   fs.writeFileSync(bridgeFile, JSON.stringify({
     remainingPercent,
     usedPercent,
-    contextTokensUsed,
-    contextTokensMax,
     timestamp: Date.now()
   }));
 } catch {
 }
-var sheriffDir = path.join(process.cwd(), ".sheriff");
+var sheriffDir = path.join(hookData.cwd || process.cwd(), ".sheriff");
 if (!fs.existsSync(sheriffDir)) {
   process.exit(0);
 }
@@ -40,7 +44,8 @@ try {
     const parts = [`\u{1F52B} Sheriff`];
     if (totalPhases > 0)
       parts.push(`Phase ${donePhases + 1}/${totalPhases}`);
-    parts.push(`ctx ${bar} ${remainingPercent}%`);
+    if (remainingPercent !== null)
+      parts.push(`ctx ${bar} ${remainingPercent}%`);
     if (running > 0)
       parts.push(`${running} running`);
     if (passing > 0)

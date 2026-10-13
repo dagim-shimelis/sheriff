@@ -7,11 +7,8 @@ allowed-tools:
 ---
 
 <execution_context>
-Determine the Sheriff tools path:
-- Global install: ~/.claude/sheriff/bin/sheriff-tools.js
-- Local install: .claude/sheriff/bin/sheriff-tools.js
-
-Check which exists and use that path as {SHERIFF_TOOLS}.
+Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
+Use its runtime paths, tool integration, and install scope.
 </execution_context>
 
 <process>
@@ -96,7 +93,7 @@ Just run the command and walk away.
 
 ### How the Pipeline Works
 
-Sheriff runs a multi-stage pipeline, each handled by a dedicated agent:
+Sheriff runs a multi-stage pipeline. Claude Code can delegate stages; Codex runs each role sequentially:
 
 ```
 /sheriff:run
@@ -127,7 +124,7 @@ Sheriff runs a multi-stage pipeline, each handled by a dedicated agent:
 
 ### Agents
 
-Sheriff uses 6 specialized agents. Each has a dedicated role:
+Sheriff uses specialized roles; Codex executes them sequentially. Each has a dedicated role:
 
 | Agent | Role | What it produces |
 |-------|------|-----------------|
@@ -160,7 +157,7 @@ After first run, config lives at `.sheriff/.sheriff.json`. Edit directly or use 
 - **domain** — Follows data flow (stores → composables → components → routes). Best for structured apps.
 - **complexity** — Easy wins first (pure functions), hard files last. Best for ramping up coverage.
 
-**Model tiers:**
+**Model tiers (Claude Code only; Codex inherits the current model):**
 - **light** (discovery, reporter) — High volume scanning, no deep reasoning needed. Default: `haiku`
 - **medium** (interrogator, planner) — Reasoning about structure and risk. Default: `sonnet`
 - **heavy** (executor) — Writing and fixing tests. Most important. Default: `opus`
@@ -260,7 +257,7 @@ Your actual test files are written to your project's test directories (never ins
 - **Review flagged items.** Sub-phases marked `needs review` have comments in the test files explaining what failed.
 - **Iterate.** After Sheriff finishes, you can re-run `/sheriff:run` and it picks up where it left off — only covering remaining gaps.
 - **Tune parallelism.** If you hit API rate limits, lower `maxParallelAgents`. For large codebases, increase it.
-- **Save cost.** Set all model tiers to `haiku` for budget runs, or `opus` for maximum quality.
+- **Claude model costs.** Set all model tiers to `haiku` for budget runs, or `opus` for maximum quality.
 - **Safe to stop.** Each passing test batch is committed atomically. Stopping mid-run loses no work.
 
 ---
@@ -281,7 +278,7 @@ Your actual test files are written to your project's test directories (never ins
 ### Requirements
 
 - **Node.js** >= 18
-- **Claude Code CLI** (latest)
+- **Claude Code or Codex** with local file and shell access
 - **Project type**: JavaScript or TypeScript with a `package.json`
 - **Test runner**: Any (Vitest, Jest, Mocha, etc) — Sheriff sets one up if missing
 
@@ -290,9 +287,9 @@ Your actual test files are written to your project's test directories (never ins
 ### Links
 
 - **npm**: `npx @dagim_s/sheriff`
-- **Install globally**: `npx @dagim_s/sheriff --global`
-- **Install locally**: `npx @dagim_s/sheriff --local`
-- **Uninstall**: `npx @dagim_s/sheriff --uninstall`
+- **Install globally**: `npx @dagim_s/sheriff --tool {INSTALL_TOOL} --global`
+- **Install locally**: `npx @dagim_s/sheriff --tool {INSTALL_TOOL} --local`
+- **Uninstall**: `npx @dagim_s/sheriff --tool {INSTALL_TOOL} --uninstall`
 
 ---
 

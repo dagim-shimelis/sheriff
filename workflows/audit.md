@@ -1,11 +1,13 @@
 # Sheriff — Audit Workflow
 
+Read `{SHERIFF_ROOT}/runtime.md` for how to execute stage roles. Parallelism and model preferences below apply only when supported by that runtime.
+
 Standalone source code audit. Reviews code for bugs, security issues, and dead code. Fixes issues found, then updates existing tests to match corrected behavior.
 
 ## Variables
 
 Replace at runtime:
-- `{SHERIFF_TOOLS}` = `~/.claude/sheriff/bin/sheriff-tools.js` (global) or `.claude/sheriff/bin/sheriff-tools.js` (local)
+- `{SHERIFF_TOOLS}` = the shell-quoted CLI path from the installation’s `runtime.md`
 
 ---
 
@@ -34,11 +36,10 @@ Sheriff Audit — {N} source files to review:
 For each source file (up to maxParallelAgents):
 
 ```
-Task(
-  subagent_type="sheriff-auditor",
-  model="{config.models.heavy}",
-  prompt="
-    Audit the source file for quality issues.
+Stage role: sheriff-auditor
+Model preference: {config.models.heavy}
+Instructions:
+Audit the source file for quality issues.
 
     <files_to_read>
     - .sheriff/.sheriff.json (if exists)
@@ -49,8 +50,6 @@ Task(
     Sub-phase: audit-{index}
     Source file: {sourceFile}
     Sheriff tools: {SHERIFF_TOOLS}
-  "
-)
 ```
 
 Run in parallel waves. Wait for all auditors to complete.
@@ -91,11 +90,10 @@ This reuses the sync workflow's Phase 1-4 logic, but scoped only to auditor-fixe
 For each fixed source file (up to maxParallelAgents):
 
 ```
-Task(
-  subagent_type="sheriff-syncer",
-  model="{config.models.heavy}",
-  prompt="
-    Sync tests after audit fixes were applied to source file.
+Stage role: sheriff-syncer
+Model preference: {config.models.heavy}
+Instructions:
+Sync tests after audit fixes were applied to source file.
 
     <files_to_read>
     - .sheriff/.sheriff.json
@@ -114,8 +112,6 @@ Task(
 
     Context: The auditor fixed issues in this source file. Review the audit report
     to understand what changed, then update the test to validate the corrected behavior.
-  "
-)
 ```
 
 ---

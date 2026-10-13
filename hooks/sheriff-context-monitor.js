@@ -12,8 +12,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const hookData = JSON.parse(process.env.HOOK_DATA || '{}');
-const sessionId = hookData.session_id || 'unknown';
+let hookData;
+try {
+  hookData = JSON.parse(process.env.HOOK_DATA || fs.readFileSync(0, 'utf8'));
+} catch {
+  process.exit(0);
+}
+const sessionId = hookData?.session_id;
+if (typeof sessionId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) process.exit(0);
 const bridgeFile = path.join(os.tmpdir(), `sheriff-ctx-${sessionId}.json`);
 
 // Debounce: only check every 5 tool calls
@@ -23,7 +29,11 @@ try {
   counter = JSON.parse(fs.readFileSync(counterFile, 'utf8')).count || 0;
 } catch {}
 counter++;
-fs.writeFileSync(counterFile, JSON.stringify({ count: counter }));
+try {
+  fs.writeFileSync(counterFile, JSON.stringify({ count: counter }));
+} catch {
+  process.exit(0);
+}
 
 if (counter % 5 !== 0) {
   process.exit(0);
@@ -44,7 +54,7 @@ if (!metrics || typeof metrics.remainingPercent !== 'number') {
 const remaining = metrics.remainingPercent;
 
 // Only inject if Sheriff is active in this project
-const isSheriffProject = fs.existsSync(path.join(process.cwd(), '.sheriff', '.sheriff.json'));
+const isSheriffProject = fs.existsSync(path.join(hookData.cwd || process.cwd(), '.sheriff', '.sheriff.json'));
 if (!isSheriffProject) {
   process.exit(0);
 }
@@ -57,7 +67,7 @@ if (remaining <= 25) {
     'Do not write any more test cases. Write the handoff note immediately.',
   ].join('\n');
 
-  console.log(JSON.stringify({ additionalContext: message }));
+  console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: message } }));
 } else if (remaining <= 35) {
   const message = [
     '⚠️  SHERIFF CONTEXT WARNING: ' + remaining + '% context remaining.',
@@ -65,7 +75,7 @@ if (remaining <= 25) {
     'Run: node {SHERIFF_TOOLS} write-handoff {agentId} when ready to hand off.',
   ].join('\n');
 
-  console.log(JSON.stringify({ additionalContext: message }));
+  console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: message } }));
 }
 
 process.exit(0);

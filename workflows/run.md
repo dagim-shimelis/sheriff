@@ -1,11 +1,13 @@
 # Sheriff — Run Workflow
 
+Read `{SHERIFF_ROOT}/runtime.md` for how to execute stage roles. Parallelism and model preferences below apply only when supported by that runtime.
+
 This is the main orchestration workflow. It runs or resumes the full Sheriff pipeline.
 
 ## Variables
 
 Replace these at runtime:
-- `{SHERIFF_TOOLS}` = `~/.claude/sheriff/bin/sheriff-tools.js` (global) or `.claude/sheriff/bin/sheriff-tools.js` (local)
+- `{SHERIFF_TOOLS}` = the shell-quoted CLI path from the installation’s `runtime.md`
 - `{PHASE_NUM}` = current phase number being executed
 
 ---
@@ -36,14 +38,11 @@ If exit code 1 (.sheriff.json missing):
 - Spawn the interrogator agent first:
 
 ```
-Task(
-  subagent_type="sheriff-interrogator",
-  model="inherit",
-  prompt="
-    Run onboarding for a new Sheriff project.
+Stage role: sheriff-interrogator
+Model preference: inherit
+Instructions:
+Run onboarding for a new Sheriff project.
     Sheriff tools: {SHERIFF_TOOLS}
-  "
-)
 ```
 
 - Wait for completion before continuing
@@ -63,11 +62,10 @@ Read the JSON output — it contains `missingFields` (array of dot-notation fiel
 Spawn the interrogator in **migration mode** to ask only about new/missing settings:
 
 ```
-Task(
-  subagent_type="sheriff-interrogator",
-  model="inherit",
-  prompt="
-    Run config MIGRATION (not full onboarding).
+Stage role: sheriff-interrogator
+Model preference: inherit
+Instructions:
+Run config MIGRATION (not full onboarding).
     The user's config is from version {storedVersion}, current is {currentVersion}.
 
     Missing fields that need answers:
@@ -78,8 +76,6 @@ Task(
     After answering, update .sheriff.json with the new values and set configVersion to {currentVersion}.
 
     Sheriff tools: {SHERIFF_TOOLS}
-  "
-)
 ```
 
 Wait for completion before continuing.
@@ -98,18 +94,14 @@ Print a brief status to orient the user.
 
 Check if .sheriff/TEST_MAP.md exists. If not:
 
-Read the model tier from `.sheriff.json` → `config.models.light` and resolve to a model ID:
-- `"haiku"` → `"haiku"`
-- `"sonnet"` → `"sonnet"`
-- `"opus"` → `"opus"`
+Use `config.models.light` only when the runtime supports that model; otherwise inherit the current model.
 
 Spawn discovery agent:
 ```
-Task(
-  subagent_type="sheriff-discovery",
-  model="{config.models.light}",
-  prompt="Run the sheriff-discovery workflow. Project root: {cwd}. Sheriff tools path: {SHERIFF_TOOLS}."
-)
+Stage role: sheriff-discovery
+Model preference: {config.models.light}
+Instructions:
+Run the sheriff-discovery workflow. Project root: {cwd}. Sheriff tools path: {SHERIFF_TOOLS}.
 ```
 
 Wait for completion. Validate that .sheriff/TEST_MAP.md now exists.
@@ -123,11 +115,10 @@ Check if .sheriff/PHASES.md exists. If not:
 
 Spawn planner agent using `config.models.medium`:
 ```
-Task(
-  subagent_type="sheriff-planner",
-  model="{config.models.medium}",
-  prompt="Run the sheriff-planner workflow. Project root: {cwd}. Sheriff tools path: {SHERIFF_TOOLS}."
-)
+Stage role: sheriff-planner
+Model preference: {config.models.medium}
+Instructions:
+Run the sheriff-planner workflow. Project root: {cwd}. Sheriff tools path: {SHERIFF_TOOLS}.
 ```
 
 Wait for completion. Validate .sheriff/PHASES.md now exists.
@@ -180,11 +171,10 @@ If `{AUDIT_MODE}` is `true`, spawn auditor agents for each sub-phase in the curr
 For each sub-phase in the current wave (up to maxParallelAgents), using `config.models.heavy`:
 
 ```
-Task(
-  subagent_type="sheriff-auditor",
-  model="{config.models.heavy}",
-  prompt="
-    Audit the source file for sub-phase {subphaseId}.
+Stage role: sheriff-auditor
+Model preference: {config.models.heavy}
+Instructions:
+Audit the source file for sub-phase {subphaseId}.
 
     <files_to_read>
     - .sheriff/PHASES.md
@@ -196,8 +186,6 @@ Task(
     Sub-phase: {subphaseId}
     Source file: {sourceFile}
     Sheriff tools: {SHERIFF_TOOLS}
-  "
-)
 ```
 
 Run all auditor tasks in parallel. Wait for ALL auditors in the wave to complete before spawning executors. This ensures executors test the corrected source code.
@@ -233,11 +221,10 @@ If no existing test file is found:
 For each sub-phase in the current wave (up to maxParallelAgents), using `config.models.heavy`:
 
 ```
-Task(
-  subagent_type="sheriff-executor",
-  model="{config.models.heavy}",
-  prompt="
-    Run the sheriff-executor workflow for sub-phase {subphaseId}.
+Stage role: sheriff-executor
+Model preference: {config.models.heavy}
+Instructions:
+Run the sheriff-executor workflow for sub-phase {subphaseId}.
 
     <files_to_read>
     - .sheriff/PHASES.md
@@ -261,11 +248,9 @@ Task(
     at {existingTestFile}. Do NOT create a new test file. Add new test cases to
     the existing file's structure. If the existing file already covers some test
     cases from the sub-phase checklist, skip those — do not duplicate them.
-  "
-)
 ```
 
-Run all wave-1 sub-phase tasks in parallel via a single message with multiple Task() calls.
+Run all wave-1 sub-phase tasks in parallel using the runtime’s execution policy.
 
 ### Spot-check after each wave
 
@@ -291,11 +276,10 @@ node {SHERIFF_TOOLS} assemble-results {PHASE_NUM} --raw
 
 Spawn reporter agent using `config.models.light`:
 ```
-Task(
-  subagent_type="sheriff-reporter",
-  model="{config.models.light}",
-  prompt="
-    Run the sheriff-reporter workflow for phase {PHASE_NUM}.
+Stage role: sheriff-reporter
+Model preference: {config.models.light}
+Instructions:
+Run the sheriff-reporter workflow for phase {PHASE_NUM}.
     Sheriff tools: {SHERIFF_TOOLS}.
 
     <files_to_read>
@@ -303,8 +287,6 @@ Task(
     - .sheriff/PHASES.md
     - .sheriff/.sheriff.json
     </files_to_read>
-  "
-)
 ```
 
 ---

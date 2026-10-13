@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node >= 18](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![npm version](https://img.shields.io/npm/v/@dagim_s/sheriff)](https://www.npmjs.com/package/@dagim_s/sheriff)
-[![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-blueviolet)](https://docs.anthropic.com/claude-code)
+[![AI tools](https://img.shields.io/badge/AI%20tools-Claude%20Code%20%2B%20Codex-blueviolet)](#quick-start)
 
 </div>
 
@@ -25,13 +25,13 @@ npx @dagim_s/sheriff
 
 ## What is Sheriff?
 
-Sheriff is a Claude Code plugin that **automatically discovers, plans, writes, fixes, and commits tests** for any JavaScript or TypeScript project — with zero configuration required. It also **audits source code** for bugs and security issues before writing tests, and **keeps tests in sync** as your code evolves.
+Sheriff is an npm-distributed testing toolkit for **Claude Code and Codex** that **automatically discovers, plans, writes, fixes, and commits tests** for any JavaScript or TypeScript project — with zero configuration required. It also **audits source code** for bugs and security issues before writing tests, and **keeps tests in sync** as your code evolves.
 
 Point it at your codebase, run one command, and walk away. Sheriff interrogates your project structure, finds every untested file and function, groups work into risk-ordered phases, dispatches parallel executor agents to write real tests against your actual framework, auto-fixes failures (up to 3 attempts per suite), and commits everything with a structured summary. No test templates, no manual configuration, no babysitting — just coverage where there was none.
 
 After initial test generation, use `/sheriff:sync` to keep tests up to date as you modify source code. Sync audits your changes for bugs and security issues by default, fixes problems, then updates affected tests to match the corrected behavior — so your tests never codify broken code.
 
-Sheriff is built on Claude Code's multi-agent plugin system. It installs as a first-class plugin with slash commands, sub-agents, and lifecycle hooks. It works with whatever test runner and framework your project already uses — or sets one up for you if you don't have one yet.
+Sheriff installs commands, subagents, and optional lifecycle features for Claude Code, or a self-contained skill for Codex. Both use the same workflows and project state. Claude Code can delegate work in parallel; Codex runs the same roles sequentially with its current model. Sheriff works with your existing test runner, or helps set one up.
 
 ---
 
@@ -43,38 +43,62 @@ Sheriff is built on Claude Code's multi-agent plugin system. It installs as a fi
 npx @dagim_s/sheriff
 ```
 
-Run the interactive installer. It will register Sheriff as a Claude Code plugin, installing its commands, agents, and hooks into your Claude Code environment. You can also install non-interactively:
+Choose **Claude Code**, **Codex**, or **Both**, then choose this project or all your projects. To skip the prompts:
 
 ```bash
-npx @dagim_s/sheriff --global   # install globally (all projects)
-npx @dagim_s/sheriff --local    # install locally (current project only)
+npx @dagim_s/sheriff --tool claude --local
+npx @dagim_s/sheriff --tool codex --local
+npx @dagim_s/sheriff --tool both --global
 ```
 
-To uninstall:
+`--tool claude,codex` also selects both. Existing `--local`/`--global` commands without `--tool` continue to target Claude Code. Non-interactive execution needs an explicit scope. `npm install` only downloads the package; run the installer with `npx` to configure an AI tool.
 
-```bash
-npx @dagim_s/sheriff --uninstall
-```
+**Step 2 — Run Sheriff in your AI tool**
 
-**Step 2 — Run Sheriff inside Claude Code**
+Claude Code:
 
-Open Claude Code in your project, then run:
-
-```
+```text
 /sheriff:run
 ```
 
-**Step 3 — That's it.**
+Codex:
 
-Sheriff handles everything from here. It onboards itself to your project, sets up test runners if needed, scans your source tree, plans a phased test strategy, writes and runs the tests, fixes failures, and commits results — all autonomously.
+```text
+$sheriff run
+```
 
-> Sheriff installs as a Claude Code plugin, giving it access to slash commands (`/sheriff:run`, `/sheriff:sync`, `/sheriff:audit`, `/sheriff:status`, `/sheriff:configure`, `/sheriff:reset`, `/sheriff:update`), dedicated sub-agents for each stage of the pipeline, and lifecycle hooks that coordinate the multi-agent workflow.
+Other operations follow the same pattern: `/sheriff:sync` in Claude Code becomes `$sheriff sync` in Codex. Use `help`, `status`, `configure`, `audit`, `reset`, or `update` in the same way. Flags such as `--no-audit` carry over. Restart your tool if newly installed commands or skills do not appear.
+
+**Step 3 — Follow onboarding**
+
+Sheriff detects your setup, asks which tests to generate, then discovers gaps, plans work, writes and runs tests, and reports results. Repository instructions and your permissions still apply to changes, package installs, and commits.
+
+To update or uninstall a selected integration:
+
+```bash
+npx @dagim_s/sheriff@latest --tool codex --local
+npx @dagim_s/sheriff --tool codex --local --uninstall
+```
+
+Use the same scope used at installation. Choose `--tool both` to update or remove both integrations. Uninstall preserves `.sheriff/` and your test files.
+
+### Compatibility
+
+| Feature | Claude Code | Codex |
+| --- | --- | --- |
+| Run, resume, audit, sync, status, config | Commands and shared workflows | Skill and shared workflows |
+| Project state | `.sheriff/` | Same `.sheriff/` format |
+| Stage execution | Subagents when available; sequential fallback | Sequential, current model |
+| Model tiers | Configurable Claude models | Inherits the current model |
+| Context monitor and statusline | Installed with Claude settings | Not installed; manual handoff instructions |
+
+Both integrations require local repository access, Node.js, and permission to run shell commands. They use your existing AI tool session; Sheriff does not require another model API key. Do not run two Sheriff sessions against the same project simultaneously. Stop one session before resuming in the other. Other AI tools are not supported yet.
 
 ---
 
 ## How It Works
 
-Sheriff runs a seven-stage pipeline. Each stage is handled by a dedicated agent. Stages run sequentially at the top level; within Stage C, executor agents run in parallel across sub-phases.
+Sheriff runs a seven-stage pipeline. Each stage has a dedicated role. Claude Code can delegate these roles to subagents and parallelize independent sub-phases. Codex executes roles sequentially, preserving the same stage and wave ordering.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -654,7 +678,7 @@ Sheriff groups sub-phases within each phase into **waves** based on file depende
 
 ### Context Monitoring
 
-A `PostToolUse` hook tracks context window usage after every tool call inside executor agents. When remaining context drops to **35%**, agents receive a soft warning and are prompted to wrap up their current sub-phase. At **25%** remaining, agents are instructed to write a handoff note before yielding — ensuring no work is lost when context exhausts. If the sub-phase is re-queued, the next executor reads the handoff and resumes seamlessly.
+In Claude Code, a `PostToolUse` hook tracks context window usage after every tool call inside executor agents. When remaining context drops to **35%**, agents receive a soft warning and are prompted to wrap up their current sub-phase. At **25%** remaining, agents are instructed to write a handoff note before yielding — ensuring no work is lost when context exhausts. If the sub-phase is re-queued, the next executor reads the handoff and resumes seamlessly.
 
 ### Statusline
 
@@ -664,7 +688,7 @@ A real-time progress bar appears in the Claude Code statusline while Sheriff is 
 🔫 Sheriff  Phase 2/5  ████████░░  3 running  12✅ 2⚠️
 ```
 
-The statusline updates after every tool use via the `Statusline` hook, showing the current phase, a visual progress bar, the number of active executor agents, and a running tally of passed and flagged sub-phases.
+Claude Code invokes the script through its `statusLine` setting, showing the current phase, a visual progress bar, the number of active executor agents, and a running tally of passed and flagged sub-phases. An existing custom statusline is preserved; in that case Sheriff context percentages are unavailable and agents must save handoffs manually.
 
 ### Auto-Retry with Escalation
 
@@ -720,39 +744,21 @@ Every time `/sheriff:run` executes, it checks npm for a newer version and displa
 
 ## Installation Details
 
-Running `npx @dagim_s/sheriff` copies Sheriff's components into your Claude Code environment.
+The installer keeps integrations separate and project state shared:
 
-### What Gets Installed
+| Integration | Project install (`--local`) | User install (`--global`) |
+| --- | --- | --- |
+| Claude commands | `.claude/commands/sheriff/` | `~/.claude/commands/sheriff/` |
+| Claude subagents | `.claude/agents/sheriff-*.md` | `~/.claude/agents/sheriff-*.md` |
+| Claude runtime | `.claude/sheriff/` | `~/.claude/sheriff/` |
+| Claude hooks/settings | `.claude/hooks/`, `.claude/settings.json` | `~/.claude/hooks/`, `~/.claude/settings.json` |
+| Codex skill and runtime | `.agents/skills/sheriff/` | `~/.agents/skills/sheriff/` |
 
-| Component | Source | Destination (global) | Destination (local) |
-|-----------|--------|----------------------|---------------------|
-| Slash commands | `commands/sheriff/` | `~/.claude/commands/sheriff/` | `.claude/commands/sheriff/` |
-| Sub-agents (7) | `agents/sheriff-*.md` | `~/.claude/agents/` | `.claude/agents/` |
-| Hooks | `hooks/dist/sheriff-*.js` | `~/.claude/hooks/` | `.claude/hooks/` |
-| Tools & workflows | `sheriff/` | `~/.claude/sheriff/` | `.claude/sheriff/` |
-| Hook config | auto-injected | `~/.claude/settings.json` | `.claude/settings.json` |
+Codex installs a `SKILL.md` plus the CLI, commands, role instructions, templates, and workflows. It does not edit `AGENTS.md`, Codex config, or Claude settings. The installer refuses to overwrite an unrelated directory named `sheriff`.
 
-### Global vs Local Install
+Claude setup preserves unrelated settings and custom statuslines, migrates Sheriff's old hook entries, and stops if settings JSON cannot be read safely. Both tools receive update instructions that retain their installation tool and scope.
 
-**Global install** (`--global` or press `g` at the prompt):
-
-- Commands and agents are available in **every project** you open in Claude Code
-- Installed to `~/.claude/`
-- Recommended for most users
-
-**Local install** (`--local` or press `l` at the prompt):
-
-- Commands and agents are scoped to the **current project only**
-- Installed to `.claude/` at your project root
-- Useful for teams that want Sheriff committed to the repo
-
-### Uninstalling
-
-```bash
-npx @dagim_s/sheriff --uninstall
-```
-
-Removes all Sheriff files (commands, agents, hooks, tools) and cleans Sheriff's entries from `settings.json`. Your `.sheriff/` project directory and any test files are never touched.
+Local installs can be committed for a team; installed workflow references are relative to their own runtime, so they are portable between machines. Claude Code teammates should rerun the installer to register their own local hook paths. Both installations store generated project state under `.sheriff/` in the project working directory.
 
 ---
 
@@ -761,7 +767,7 @@ Removes all Sheriff files (commands, agents, hooks, tools) and cleans Sheriff's 
 | Requirement | Version |
 |-------------|---------|
 | Node.js | >= 18.0.0 |
-| Claude Code CLI | Latest |
+| AI tool | Claude Code or Codex with local skill/command and shell support |
 | Project type | JavaScript or TypeScript |
 
 **Test runner**: Sheriff works with Vitest, Jest, Mocha, or any runner with a CLI. If your project doesn't have a test runner, Sheriff will recommend one and set it up for you.
@@ -795,3 +801,14 @@ A few areas where help would be especially valuable:
 - **Sync strategies** — smarter test update heuristics for complex refactors
 
 If you're building on top of Sheriff or integrating it into a larger workflow, feel free to open a discussion — feedback on the agent API shapes the roadmap.
+
+## Development checks
+
+```bash
+npm install
+npm run build:hooks
+npm test
+npm pack --dry-run
+```
+
+The tests install into isolated temporary homes/projects, exercise the copied CLI, and check update/uninstall behavior and settings preservation. They do not prove model-driven end-to-end test generation in either AI tool. From this checkout, try the installer with `node bin/install.js --tool codex --local` in a disposable project (use the absolute script path when outside the checkout).

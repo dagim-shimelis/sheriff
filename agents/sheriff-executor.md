@@ -207,7 +207,7 @@ Use "fail" only if the test file could not be created at all.
 </deviation_rules>
 
 <context_management>
-If you are approaching context limits (the context monitor hook will warn you):
+If you are approaching context limits (use a context monitor warning when available; otherwise save a handoff before stopping):
 - At 75%: finish the current test case, write what you have to the test file
 - At 85%: write the handoff note immediately:
 

@@ -133,7 +133,7 @@ switch (command) {
   }
 
   case 'claim-subphase': {
-    const [, , subphaseId, agentId] = args;
+    const [, subphaseId, agentId] = args;
     if (!subphaseId || !agentId) err('claim-subphase requires <id> <agentId>');
     const result = phases.claimSubphase(subphaseId, agentId, cwd);
     out(result);
@@ -160,7 +160,7 @@ switch (command) {
   }
 
   case 'mark-complete': {
-    const [, , subphaseId, result] = args;
+    const [, subphaseId, result] = args;
     if (!subphaseId || !result) err('mark-complete requires <id> <pass|fail|review>');
     if (!['pass', 'fail', 'review'].includes(result)) err('result must be pass, fail, or review');
     const r = phases.markComplete(subphaseId, result, cwd);
@@ -229,7 +229,7 @@ switch (command) {
   }
 
   case 'git-commit': {
-    const [, , subphaseId, ...msgParts] = args;
+    const [, subphaseId, ...msgParts] = args;
     if (!subphaseId) err('git-commit requires <id>');
     const msg = msgParts.join(' ') || null;
     const result = git.commitSuccess(subphaseId, msg, cwd);
@@ -244,7 +244,7 @@ switch (command) {
   }
 
   case 'update-testmap': {
-    const [, , sourceFile, testType, status] = args;
+    const [, sourceFile, testType, status] = args;
     if (!sourceFile || !testType || !status) err('update-testmap requires <sourceFile> <unit|e2e> <tested|review|failed>');
     if (!['unit', 'e2e'].includes(testType)) err('testType must be unit or e2e');
     if (!['tested', 'review', 'failed'].includes(status)) err('status must be tested, review, or failed');

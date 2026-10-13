@@ -9,18 +9,12 @@ allowed-tools:
 ---
 
 <execution_context>
-Determine the Sheriff tools path:
-- Global install: ~/.claude/sheriff/bin/sheriff-tools.js
-- Local install: .claude/sheriff/bin/sheriff-tools.js
-
-Read current config if it exists:
-```bash
-node {SHERIFF_TOOLS} read-config --raw
-```
+Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
+Use its runtime paths, tool integration, and install scope.
 </execution_context>
 
 <process>
 Execute the configure workflow:
 
-@~/.claude/sheriff/workflows/configure.md
+Read and follow `{SHERIFF_ROOT}/workflows/configure.md`.
 </process>

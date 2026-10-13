@@ -1,11 +1,13 @@
 # Sheriff — Sync Workflow
 
+Read `{SHERIFF_ROOT}/runtime.md` for how to execute stage roles. Parallelism and model preferences below apply only when supported by that runtime.
+
 Detects source code changes, audits them for quality issues, fixes problems, then updates tests to match. Audit is on by default — use `--no-audit` to skip.
 
 ## Variables
 
 Replace at runtime:
-- `{SHERIFF_TOOLS}` = `~/.claude/sheriff/bin/sheriff-tools.js` (global) or `.claude/sheriff/bin/sheriff-tools.js` (local)
+- `{SHERIFF_TOOLS}` = the shell-quoted CLI path from the installation’s `runtime.md`
 - `{AUDIT_MODE}` = `true` (default) or `false` (if `--no-audit` flag)
 
 ---
@@ -112,11 +114,10 @@ mkdir -p .sheriff/audits
 For each changed source file (up to maxParallelAgents), spawn an auditor:
 
 ```
-Task(
-  subagent_type="sheriff-auditor",
-  model="{config.models.heavy}",
-  prompt="
-    Audit the changed source file for quality issues.
+Stage role: sheriff-auditor
+Model preference: {config.models.heavy}
+Instructions:
+Audit the changed source file for quality issues.
 
     <files_to_read>
     - .sheriff/.sheriff.json (if exists)
@@ -135,8 +136,6 @@ Task(
 
     Focus your audit on the CHANGED portions of the file. Review the full file
     for context, but prioritize auditing the new/modified code shown in the diff.
-  "
-)
 ```
 
 Run all auditor tasks in parallel. Wait for ALL to complete before proceeding.
@@ -188,11 +187,10 @@ And stop.
 For each file needing sync (up to maxParallelAgents from .sheriff.json):
 
 ```
-Task(
-  subagent_type="sheriff-syncer",
-  model="{config.models.heavy}",
-  prompt="
-    Sync tests for changed source file.
+Stage role: sheriff-syncer
+Model preference: {config.models.heavy}
+Instructions:
+Sync tests for changed source file.
 
     <files_to_read>
     - .sheriff/.sheriff.json
@@ -218,8 +216,6 @@ Task(
     Audit context: The auditor reviewed this file and may have applied fixes.
     Read the audit report for details on what was changed and why.
     Ensure your tests validate the corrected behavior.
-  "
-)
 ```
 
 Run sync agents in parallel waves (same wave logic as executor).

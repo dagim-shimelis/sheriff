@@ -7,15 +7,9 @@ allowed-tools:
 ---
 
 <execution_context>
-Determine the Sheriff tools path:
-- Global install: ~/.claude/sheriff/bin/sheriff-tools.js
-- Local install: .claude/sheriff/bin/sheriff-tools.js
+Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
+Use its runtime paths, tool integration, and install scope.
 
-Check which exists and use that path as {SHERIFF_TOOLS}.
-
-Determine the install mode:
-- If {SHERIFF_TOOLS} starts with ~/.claude → global install
-- If {SHERIFF_TOOLS} starts with .claude → local install
 </execution_context>
 
 <process>
@@ -40,15 +34,12 @@ If `updateAvailable` is `true`, continue:
 
 ## Step 2 — Run the installer
 
-For global install:
+Use the tool and scope recorded in runtime.md:
 ```bash
-npx @dagim_s/sheriff@latest --global --silent
+npx @dagim_s/sheriff@latest --tool {INSTALL_TOOL} --{INSTALL_SCOPE} --silent
 ```
 
-For local install:
-```bash
-npx @dagim_s/sheriff@latest --local --silent
-```
+For a local install, run from the project directory containing this installation, not a nested working directory.
 
 ## Step 3 — Verify the update
 
@@ -65,7 +56,7 @@ Confirm the version matches `latestVersion`:
 If the version did not change, warn:
 ```
 ⚠️ Update may not have applied correctly. Try running manually:
-   npx @dagim_s/sheriff@latest --global
+   npx @dagim_s/sheriff@latest --tool {INSTALL_TOOL} --{INSTALL_SCOPE}
 ```
 
 </process>
