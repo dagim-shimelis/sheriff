@@ -124,6 +124,15 @@ There are no package dependencies. Hook builds use Node's syntax check and copy 
 
 These checks do not prove live model-driven test generation in Claude Code or Codex, every framework/runner combination, or production/browser-service behavior. Before release, exercise the complete run/resume/audit/sync flow in each host against disposable example projects.
 
+To run opt-in acceptance tests with the corresponding installed, authenticated host CLI:
+
+```bash
+npm run test:live:codex
+npm run test:live:claude
+```
+
+These consume normal model usage. They pack the current checkout, install it in a temporary project, and start fresh host sessions for help, run, audit, pause, resume, sync, and status. Independent checks rerun generated tests, verify a seeded bug and a behavior mutation are caught, and check that unrelated work survives. The harness prints its evidence directory containing prompts, JSONL transcripts, test output, and `report.json`; it retains the fixture for inspection. Each session has a ten-minute timeout. Codex uses its default model, user configuration disabled, and workspace-write sandboxing. Claude uses its default model, project/local settings, sandboxed shell commands without unsandboxed retries, and hook-event capture. Authentication/provider denials stop the test and are recorded as blocked. These tests are separate from `npm test` and CI; they do not cover interactive UI, delegated workers, or browser/E2E runners.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
