@@ -1,89 +1,47 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
-const { readFile, writeFile, ASSEMBLED_FILE } = require('./state');
-
+const { readFile, writeFile, safePath, validateId, PHASES_FILE, ASSEMBLED_FILE } = require('./state');
+const { parseSubphases } = require('./phases');
 const RESULTS_DIR = '.sheriff/results';
 
+function resultFile(id) { return `${RESULTS_DIR}/${validateId(id, 'subphase').replace('.', '-')}.md`; }
 function writeResult(subphaseId, content, cwd = process.cwd()) {
-  const file = `${RESULTS_DIR}/${subphaseId.replace(/\./g, '-')}.md`;
+  if (!content.trim()) throw new Error('Result content cannot be empty');
+  const file = resultFile(subphaseId);
   writeFile(file, content, cwd);
   return file;
 }
-
-function readResult(subphaseId, cwd = process.cwd()) {
-  return readFile(`${RESULTS_DIR}/${subphaseId.replace(/\./g, '-')}.md`, cwd);
-}
+function readResult(subphaseId, cwd = process.cwd()) { return readFile(resultFile(subphaseId), cwd); }
 
 function assembleResults(phaseNum, cwd = process.cwd()) {
-  const resultsPath = path.join(cwd, RESULTS_DIR);
-  if (!fs.existsSync(resultsPath)) return null;
-
-  // Read PHASES.md to extract all sub-phase IDs for this phase
-  const { PHASES_FILE } = require('./state');
-  const phasesContent = readFile(PHASES_FILE, cwd);
-  const expectedSubphases = [];
-  if (phasesContent) {
-    const subphasePattern = new RegExp(
-      `### (${String(phaseNum).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.\\d+)`,
-      'g',
-    );
-    let match;
-    while ((match = subphasePattern.exec(phasesContent)) !== null) {
-      expectedSubphases.push(match[1].trim());
-    }
+  const phase = validateId(phaseNum, 'phase');
+  const plan = readFile(PHASES_FILE, cwd);
+  const expected = plan ? parseSubphases(plan).filter(item => item.id.split('.')[0] === phase).map(item => item.id) : [];
+  const dir = safePath(RESULTS_DIR, cwd);
+  const available = fs.existsSync(dir) ? fs.readdirSync(dir).filter(file => new RegExp(`^${phase}-[1-9]\\d*\\.md$`).test(file)).map(file => file.slice(0, -3).replace('-', '.')) : [];
+  const ids = (plan ? expected : available).sort((a, b) => Number(a.split('.')[1]) - Number(b.split('.')[1]));
+  if (!ids.length) return null;
+  const found = [], missing = [];
+  for (const id of ids) {
+    const content = readResult(id, cwd);
+    if (!content?.trim()) missing.push(id); else found.push(content);
   }
-
-  const files = fs.readdirSync(resultsPath)
-    .filter((f) => f.endsWith('.md'))
-    .filter((f) => {
-      // Only include results for the requested phase
-      const parts = f.replace('.md', '').split('-');
-      return parts[0] === String(phaseNum);
-    })
-    .sort();
-
-  if (files.length === 0 && expectedSubphases.length === 0) return null;
-
-  // Determine which sub-phases have result files
-  const foundSubphases = files.map((f) => f.replace('.md', '').replace(/-/g, '.'));
-  const missing = expectedSubphases.filter((sp) => !foundSubphases.includes(sp));
-
-  const total = expectedSubphases.length || files.length;
-  const found = files.length;
-
-  const parts = [
-    `# Sheriff Phase ${phaseNum} — Assembled Results\n`,
-    `Generated: ${new Date().toISOString()}\n`,
-    `Total sub-phases: ${total}, Found: ${found}, Missing: ${missing.length}\n\n---\n`,
-  ];
-
-  for (const file of files) {
-    const content = fs.readFileSync(path.join(resultsPath, file), 'utf8');
-    parts.push(`\n${content}\n\n---\n`);
-  }
-
-  const assembled = parts.join('\n');
+  const assembled = [
+    `# Sheriff Phase ${phase} — Assembled Results`,
+    `Generated: ${new Date().toISOString()}`,
+    `Total sub-phases: ${ids.length}, Found: ${found.length}, Missing: ${missing.length}`,
+    ...found,
+  ].join('\n\n---\n\n') + '\n';
   writeFile(ASSEMBLED_FILE, assembled, cwd);
-  return { content: assembled, missing, total, found };
+  return { content: assembled, missing, total: ids.length, found: found.length };
 }
-
+function summaryFile(id) { return `.sheriff/summaries/phase-${validateId(id, 'phase')}.md`; }
 function writePhaseSummary(phaseNum, content, cwd = process.cwd()) {
-  const file = `.sheriff/summaries/phase-${phaseNum}.md`;
+  if (!content.trim()) throw new Error('Summary content cannot be empty');
+  const file = summaryFile(phaseNum);
   writeFile(file, content, cwd);
   return file;
 }
-
-function readPhaseSummary(phaseNum, cwd = process.cwd()) {
-  return readFile(`.sheriff/summaries/phase-${phaseNum}.md`, cwd);
-}
-
-module.exports = {
-  writeResult,
-  readResult,
-  assembleResults,
-  writePhaseSummary,
-  readPhaseSummary,
-  RESULTS_DIR,
-};
+function readPhaseSummary(phaseNum, cwd = process.cwd()) { return readFile(summaryFile(phaseNum), cwd); }
+module.exports = { writeResult, readResult, assembleResults, writePhaseSummary, readPhaseSummary, RESULTS_DIR };

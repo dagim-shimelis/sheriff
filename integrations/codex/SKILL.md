@@ -18,4 +18,4 @@ Route the user's requested operation to the matching command, preserving any fla
 | Update this installation | [update](commands/update.md) |
 | Help or no operation specified | [help](commands/help.md) |
 
-Read the selected command, its referenced workflow, and role files when each stage needs them. Execute roles sequentially with the current model as described in runtime.md. State checks and result files determine progress; do not claim that generated tests passed without running them.
+Read the selected command, its referenced workflow, and role files when each stage needs them. Execute roles sequentially with the current model as described in runtime.md. State checks and current result evidence determine progress. Resume pending handoffs within dependency order; review/fail items need an explicit retry request. Preserve the user’s source-change and commit permissions, and do not claim tests passed without executing them.

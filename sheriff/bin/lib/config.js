@@ -1,7 +1,6 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const { readFile, writeFile, fileExists, safePath } = require('./state');
 
 const CONFIG_FILE = '.sheriff/.sheriff.json';
 
@@ -39,7 +38,7 @@ const CONFIG_VERSION_REGISTRY = {
 };
 
 function getConfigPath(cwd = process.cwd()) {
-  return path.join(cwd, CONFIG_FILE);
+  return safePath(CONFIG_FILE, cwd);
 }
 
 /**
@@ -71,22 +70,56 @@ function mergeDefaults(cfg) {
   return merge(cfg, defaults);
 }
 
+function validateConfig(cfg) {
+  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!object(cfg)) throw new Error('Config must be a JSON object');
+  for (const key of ['testRunner', 'framework', 'language', 'version']) {
+    if (cfg[key] !== undefined && cfg[key] !== null && (typeof cfg[key] !== 'string' || !cfg[key].trim())) throw new Error(`${key} must be a nonempty string or null`);
+  }
+  for (const key of ['testRunners', 'testTypes', 'testRunnerSetup', 'models']) {
+    if (cfg[key] !== undefined && !object(cfg[key])) throw new Error(`${key} must be an object`);
+  }
+  for (const key of ['sourceDirs', 'excludeDirs', 'excludePatterns']) {
+    if (cfg[key] !== undefined && (!Array.isArray(cfg[key]) || cfg[key].some(value => typeof value !== 'string' || !value.trim()))) throw new Error(`${key} must be an array of nonempty strings`);
+  }
+  for (const key of ['configVersion', 'maxParallelAgents', 'staleLockMinutes']) {
+    if (cfg[key] !== undefined && (!Number.isSafeInteger(cfg[key]) || cfg[key] < 1)) throw new Error(`${key} must be a positive integer`);
+  }
+  if (cfg.configVersion > CURRENT_CONFIG_VERSION) throw new Error('Config was written by a newer Sheriff version; update Sheriff first');
+  for (const key of ['unit', 'e2e']) {
+    if (cfg.testTypes?.[key] !== undefined && typeof cfg.testTypes[key] !== 'boolean') throw new Error(`testTypes.${key} must be boolean`);
+    for (const group of ['testRunners', 'testRunnerSetup']) {
+      if (cfg[group]?.[key] !== undefined && cfg[group][key] !== null && (typeof cfg[group][key] !== 'string' || !cfg[group][key].trim())) throw new Error(`${group}.${key} must be a nonempty string or null`);
+    }
+  }
+  for (const [key, values] of Object.entries({phaseStrategy: ['risk', 'domain', 'complexity'], onTestFailure: ['flag', 'fix', 'fix+notify', 'fix-and-notify'], confidence: ['high', 'low']})) {
+    if (cfg[key] !== undefined && !values.includes(cfg[key])) throw new Error(`Invalid ${key}`);
+  }
+  for (const key of ['light', 'medium', 'heavy']) {
+    if (cfg.models?.[key] !== undefined && (typeof cfg.models[key] !== 'string' || !cfg.models[key].trim())) throw new Error(`models.${key} must be a nonempty string`);
+  }
+  return cfg;
+}
+
+function readStoredConfig(cwd) {
+  const content = readFile(CONFIG_FILE, cwd);
+  return content === null ? null : validateConfig(JSON.parse(content));
+}
+
 function readConfig(cwd = process.cwd()) {
-  const file = getConfigPath(cwd);
-  if (!fs.existsSync(file)) return null;
-  const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const cfg = readStoredConfig(cwd);
+  if (!cfg) return null;
+  // Older single-runner configurations remain useful after defaults are filled.
+  if (cfg.testRunner && cfg.testRunners?.unit === undefined) cfg.testRunners = { ...cfg.testRunners, unit: cfg.testRunner };
   return mergeDefaults(cfg);
 }
 
 function writeConfig(config, cwd = process.cwd()) {
-  const file = getConfigPath(cwd);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(config, null, 2));
+  validateConfig(config);
+  writeFile(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n', cwd);
 }
 
-function configExists(cwd = process.cwd()) {
-  return fs.existsSync(getConfigPath(cwd));
-}
+function configExists(cwd = process.cwd()) { return fileExists(CONFIG_FILE, cwd); }
 
 function getDefault() {
   return {
@@ -142,7 +175,7 @@ function getNestedValue(obj, dotPath) {
  * Returns an object describing what needs migration.
  */
 function checkConfigVersion(cwd = process.cwd()) {
-  const cfg = readConfig(cwd);
+  const cfg = readStoredConfig(cwd);
   if (!cfg) {
     return {
       needsMigration: false,
@@ -154,7 +187,7 @@ function checkConfigVersion(cwd = process.cwd()) {
     };
   }
 
-  const storedVersion = cfg.configVersion || 1;
+  const storedVersion = cfg.configVersion ?? 0;
 
   // Collect fields introduced in versions after the stored version
   const missingFields = [];
@@ -201,5 +234,5 @@ function checkConfigVersion(cwd = process.cwd()) {
 
 module.exports = {
   readConfig, writeConfig, configExists, getDefault, getConfigPath,
-  checkConfigVersion, mergeDefaults, CURRENT_CONFIG_VERSION, CONFIG_VERSION_REGISTRY,
+  checkConfigVersion, mergeDefaults, validateConfig, CURRENT_CONFIG_VERSION, CONFIG_VERSION_REGISTRY,
 };

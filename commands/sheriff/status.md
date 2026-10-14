@@ -6,36 +6,9 @@ allowed-tools:
   - Bash
 ---
 
-<execution_context>
 Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
 Use its runtime paths, tool integration, and install scope.
-</execution_context>
 
-<process>
-Run:
-```bash
-node {SHERIFF_TOOLS} get-status --raw
-```
+If `.sheriff/` or configuration is missing, report not configured. If PHASES.md is missing, report no plan. Otherwise run `get-status --raw` and read the current phase metadata/results/summaries.
 
-Read .sheriff/PHASES.md and all files in .sheriff/summaries/ (phase-*.md).
-
-Display a clean progress summary:
-
-1. **Phase Progress table** — render a table with these columns:
-
-   | Phase | Title | Status | Sub-phases | Tests |
-   |-------|-------|--------|-----------|-------|
-
-   - Phase, Title, Status, Sub-phases: taken from the PHASES.md Phase Progress table
-   - **Tests**: for each phase, read its summary file (.sheriff/summaries/phase-{N}.md) and extract `tests_passing`, `tests_skipped`, and `tests_failed` from the frontmatter. Display as: `{written}✍ {passing}✅ {failed}❌` where written = passing + skipped + failed. Omit the failed part if 0. If no summary exists for a phase, show `—`.
-
-2. Any sub-phases marked ⚠️ needs review — list them with their notes
-3. Any sub-phases marked ❌ fail — list them
-4. **Overall test totals** from the get-status output: tests written, tests passing, tests failed
-
-If .sheriff.json does not exist:
-  "Sheriff is not configured for this project. Run /sheriff:run to get started."
-
-If PHASES.md does not exist:
-  "Sheriff has not run yet. Run /sheriff:run to start."
-</process>
+Show phase/sub-phase pass, review, fail, in-progress, pending counts and dependency blockers. Surface pending handoffs. Use actual result evidence for test passing/skipped/failed counts; do not confuse completed sub-phases with passing tests. Summaries may be stale after a retry: prefer current state and disclose missing evidence. Do not sum overlapping suite runs as distinct tests, infer coverage percentages, or mutate state while showing status.

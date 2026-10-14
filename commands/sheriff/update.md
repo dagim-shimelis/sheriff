@@ -6,57 +6,15 @@ allowed-tools:
   - Bash
 ---
 
-<execution_context>
 Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
 Use its runtime paths, tool integration, and install scope.
 
-</execution_context>
+Run `check-update --raw` and parse its JSON, including exit 1 for an available update. If the registry check reports an error, say the latest version could not be verified; do not report "already up to date". If no newer version is available, report the current version and stop.
 
-<process>
+When an update is available, use the tool and scope recorded in runtime.md:
 
-## Step 1 — Check current version and available update
-
-```bash
-node {SHERIFF_TOOLS} check-update --raw
-```
-
-Parse the JSON output. If `updateAvailable` is `false`:
-```
-✅ Sheriff is already up to date (v{currentVersion}).
-```
-Stop here.
-
-If `updateAvailable` is `true`, continue:
-```
-🔄 Update available: v{currentVersion} → v{latestVersion}
-   Updating...
-```
-
-## Step 2 — Run the installer
-
-Use the tool and scope recorded in runtime.md:
 ```bash
 npx @dagim_s/sheriff@latest --tool {INSTALL_TOOL} --{INSTALL_SCOPE} --silent
 ```
 
-For a local install, run from the project directory containing this installation, not a nested working directory.
-
-## Step 3 — Verify the update
-
-```bash
-node {SHERIFF_TOOLS} current-version --raw
-```
-
-Confirm the version matches `latestVersion`:
-
-```
-✅ Sheriff updated to v{latestVersion}.
-```
-
-If the version did not change, warn:
-```
-⚠️ Update may not have applied correctly. Try running manually:
-   npx @dagim_s/sheriff@latest --tool {INSTALL_TOOL} --{INSTALL_SCOPE}
-```
-
-</process>
+For local installations, execute in the project directory containing this installation, not a nested working directory. Preserve user overrides for installation paths. Check installer exit status before reading `current-version --raw` again; verify it matches the expected published version. Report failures instead of claiming success. Project `.sheriff/` state and tests are separate from the installed runtime.

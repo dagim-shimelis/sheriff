@@ -2,112 +2,106 @@
 
 const fs = require('fs');
 const path = require('path');
+const { randomUUID } = require('crypto');
 
 const SHERIFF_DIR = '.sheriff';
 const TEST_MAP_FILE = '.sheriff/TEST_MAP.md';
 const PHASES_FILE = '.sheriff/PHASES.md';
 const ASSEMBLED_FILE = '.sheriff/results-assembled.md';
 
+function safePath(relPath, cwd = process.cwd()) {
+  const root = path.resolve(cwd);
+  const full = path.resolve(root, relPath);
+  const relative = path.relative(root, full);
+  if (path.isAbsolute(relPath) || relative === '..' || relative.startsWith(`..${path.sep}`) || !relative) {
+    throw new Error('State path must remain inside the project');
+  }
+  let current = root;
+  for (const part of relative.split(path.sep)) {
+    current = path.join(current, part);
+    try {
+      if (fs.lstatSync(current).isSymbolicLink()) throw new Error(`Refusing symlink state path: ${relative}`);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  return full;
+}
+
+function validateId(value, kind = 'agent') {
+  const patterns = { agent: /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/, subphase: /^[1-9]\d*\.[1-9]\d*$/, phase: /^[1-9]\d*$/ };
+  if (!patterns[kind].test(String(value ?? ''))) throw new Error(`Invalid ${kind} ID: ${value}`);
+  return String(value);
+}
+
 function ensureSheriffDir(cwd = process.cwd()) {
-  fs.mkdirSync(path.join(cwd, SHERIFF_DIR), { recursive: true });
-  fs.mkdirSync(path.join(cwd, SHERIFF_DIR, 'summaries'), { recursive: true });
-  fs.mkdirSync(path.join(cwd, SHERIFF_DIR, 'handoffs'), { recursive: true });
+  for (const dir of ['', '/summaries', '/handoffs', '/results']) {
+    fs.mkdirSync(safePath(SHERIFF_DIR + dir, cwd), { recursive: true });
+  }
 }
 
 function readFile(relPath, cwd = process.cwd()) {
-  const full = path.join(cwd, relPath);
-  if (!fs.existsSync(full)) return null;
-  return fs.readFileSync(full, 'utf8');
+  try { return fs.readFileSync(safePath(relPath, cwd), 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
 
 function writeFile(relPath, content, cwd = process.cwd()) {
-  const full = path.join(cwd, relPath);
-  const tmp = full + '.tmp';
+  const full = safePath(relPath, cwd);
+  const tmp = `${full}.${randomUUID()}.tmp`;
   fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(tmp, content);
-  fs.renameSync(tmp, full);
+  try {
+    fs.writeFileSync(tmp, content, { flag: 'wx', mode: 0o600 });
+    fs.renameSync(tmp, full);
+  } finally {
+    try { fs.unlinkSync(tmp); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
 }
 
 function fileExists(relPath, cwd = process.cwd()) {
-  return fs.existsSync(path.join(cwd, relPath));
+  return fs.existsSync(safePath(relPath, cwd));
 }
 
+function handoffFile(id) { return `.sheriff/handoffs/handoff-${validateId(id)}.md`; }
 function writeHandoff(agentId, content, cwd = process.cwd()) {
-  const file = `.sheriff/handoffs/handoff-${agentId}.md`;
+  const file = handoffFile(agentId);
+  if (!content.trim()) throw new Error('Handoff content cannot be empty');
   writeFile(file, content, cwd);
   return file;
 }
-
-function readHandoff(agentId, cwd = process.cwd()) {
-  return readFile(`.sheriff/handoffs/handoff-${agentId}.md`, cwd);
-}
-
+function readHandoff(agentId, cwd = process.cwd()) { return readFile(handoffFile(agentId), cwd); }
 function deleteHandoff(identifier, cwd = process.cwd()) {
-  const file = `.sheriff/handoffs/handoff-${identifier}.md`;
-  const full = path.join(cwd, file);
-  if (fs.existsSync(full)) {
-    fs.unlinkSync(full);
-    return { deleted: true, file };
-  }
-  return { deleted: false, file };
+  const file = handoffFile(identifier);
+  try { fs.unlinkSync(safePath(file, cwd)); return { deleted: true, file }; }
+  catch (error) { if (error.code === 'ENOENT') return { deleted: false, file }; throw error; }
 }
-
 function cleanupHandoffs(cwd = process.cwd()) {
-  const dir = path.join(cwd, '.sheriff/handoffs');
+  const dir = safePath('.sheriff/handoffs', cwd);
   if (!fs.existsSync(dir)) return { deleted: 0 };
-  const files = fs.readdirSync(dir).filter(f => f.startsWith('handoff-') && f.endsWith('.md'));
-  for (const f of files) fs.unlinkSync(path.join(dir, f));
+  const files = fs.readdirSync(dir).filter(f => /^handoff-[a-zA-Z0-9][a-zA-Z0-9_.-]*\.md$/.test(f));
+  for (const file of files) safePath(`.sheriff/handoffs/${file}`, cwd);
+  for (const file of files) fs.unlinkSync(path.join(dir, file));
   return { deleted: files.length };
 }
 
 function getStatus(cwd = process.cwd()) {
-  const phases = readFile(PHASES_FILE, cwd);
-  if (!phases) return { initialized: false };
-
-  const lines = phases.split('\n');
-  const total = (phases.match(/^\|[^|]+\|[^|]+\|[^|]+\|[^|]+\|/gm) || []).length - 1;
-  const done = (phases.match(/✅/g) || []).length;
-  const inProgress = (phases.match(/🔒/g) || []).length;
-  const review = (phases.match(/⚠️/g) || []).length;
-  const pending = total - done - inProgress - review;
-
-  // Parse test counts from phase summaries
-  let testsWritten = 0;
-  let testsPassing = 0;
-  let testsFailed = 0;
-
-  const summariesDir = path.join(cwd, '.sheriff', 'summaries');
-  if (fs.existsSync(summariesDir)) {
-    const summaryFiles = fs.readdirSync(summariesDir).filter(f => f.startsWith('phase-') && f.endsWith('.md'));
-    for (const file of summaryFiles) {
-      const content = fs.readFileSync(path.join(summariesDir, file), 'utf8');
-      const passingMatch = content.match(/tests_passing:\s*(\d+)/);
-      const skippedMatch = content.match(/tests_skipped:\s*(\d+)/);
-      const failedMatch = content.match(/tests_failed:\s*(\d+)/);
-      const passing = passingMatch ? parseInt(passingMatch[1], 10) : 0;
-      const skipped = skippedMatch ? parseInt(skippedMatch[1], 10) : 0;
-      const failed = failedMatch ? parseInt(failedMatch[1], 10) : 0;
-      testsPassing += passing;
-      testsFailed += failed;
-      testsWritten += passing + skipped + failed;
+  const content = readFile(PHASES_FILE, cwd);
+  if (content === null) return { initialized: false };
+  const phases = require('./phases').parseSubphases(content);
+  const status = { initialized: true, total: phases.length, done: 0, inProgress: 0, review: 0, failed: 0, pending: 0, testsWritten: 0, testsPassing: 0, testsFailed: 0 };
+  const fields = { pass: 'done', in_progress: 'inProgress', review: 'review', fail: 'failed', pending: 'pending' };
+  for (const phase of phases) status[fields[phase.status]]++;
+  const dir = safePath('.sheriff/summaries', cwd);
+  if (fs.existsSync(dir)) {
+    for (const file of fs.readdirSync(dir).filter(f => /^phase-[1-9]\d*\.md$/.test(f))) {
+      const summary = readFile(`.sheriff/summaries/${file}`, cwd);
+      const count = key => Number(summary.match(new RegExp(`^${key}:\\s*(\\d+)\\s*$`, 'm'))?.[1] || 0);
+      const passing = count('tests_passing'), failed = count('tests_failed'), skipped = count('tests_skipped');
+      status.testsPassing += passing;
+      status.testsFailed += failed;
+      status.testsWritten += passing + failed + skipped;
     }
   }
-
-  return { initialized: true, total, done, inProgress, review, pending, testsWritten, testsPassing, testsFailed };
+  return status;
 }
 
-module.exports = {
-  ensureSheriffDir,
-  readFile,
-  writeFile,
-  fileExists,
-  writeHandoff,
-  readHandoff,
-  deleteHandoff,
-  cleanupHandoffs,
-  getStatus,
-  SHERIFF_DIR,
-  TEST_MAP_FILE,
-  PHASES_FILE,
-  ASSEMBLED_FILE,
-};
+module.exports = { safePath, validateId, ensureSheriffDir, readFile, writeFile, fileExists, writeHandoff, readHandoff, deleteHandoff, cleanupHandoffs, getStatus, SHERIFF_DIR, TEST_MAP_FILE, PHASES_FILE, ASSEMBLED_FILE };

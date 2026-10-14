@@ -1,64 +1,7 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const { readFile, writeFile, TEST_MAP_FILE } = require('./state');
-
-// Mutex: simple file-based lock for concurrent writes (mirrors phases.js)
-const LOCK_FILE = '.sheriff/.testmap.lock';
-
-function acquireLock(cwd, timeout = 10000) {
-  const lockPath = path.join(cwd, LOCK_FILE);
-  const start = Date.now();
-  while (fs.existsSync(lockPath)) {
-    // Check if the existing lock is stale
-    try {
-      const lockContent = fs.readFileSync(lockPath, 'utf8');
-      const [pidStr, timestampStr] = lockContent.split('|');
-      const pid = parseInt(pidStr, 10);
-      const timestamp = parseInt(timestampStr, 10);
-      let alive = false;
-      try { process.kill(pid, 0); alive = true; } catch { alive = false; }
-      const age = Date.now() - timestamp;
-      if (!alive || age > 60000) {
-        process.stderr.write(`[sheriff] Removing stale lock ${lockPath} (pid=${pid}, alive=${alive}, age=${age}ms)\n`);
-        fs.unlinkSync(lockPath);
-        continue;
-      }
-    } catch (e) {
-      // If we can't read/parse the lock file, treat it as stale
-      process.stderr.write(`[sheriff] Removing unreadable lock ${lockPath}\n`);
-      try { fs.unlinkSync(lockPath); } catch {}
-      continue;
-    }
-    if (Date.now() - start > timeout) throw new Error('Could not acquire TEST_MAP.md lock');
-    const sleep = (ms) => { const end = Date.now() + ms; while (Date.now() < end) {} };
-    sleep(100);
-  }
-  fs.writeFileSync(lockPath, `${process.pid}|${Date.now()}`);
-}
-
-function releaseLock(cwd) {
-  const lockPath = path.join(cwd, LOCK_FILE);
-  if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
-}
-
-function withLock(cwd, fn) {
-  try {
-    acquireLock(cwd);
-  } catch (err) {
-    return { success: false, reason: 'lock_timeout', message: err.message };
-  }
-  try {
-    return fn();
-  } finally {
-    releaseLock(cwd);
-  }
-}
-
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+const { withLock } = require('./lock');
 
 /**
  * Normalize a file path for comparison: strip leading './', use forward slashes.
@@ -115,30 +58,30 @@ function findSourceRow(cells1, sourceFile) {
 function updateCoverage(sourceFile, testType, status, cwd = process.cwd()) {
   const statusMap = { tested: '✅', review: '⚠️', failed: '❌' };
   const icon = statusMap[status];
-  if (!icon) throw new Error(`Invalid status: ${status}. Must be tested, review, or failed`);
+  if (!Object.hasOwn(statusMap, status)) throw new Error(`Invalid status: ${status}. Must be tested, review, or failed`);
 
   const columnIndex = testType === 'unit' ? 2 : testType === 'e2e' ? 3 : null;
   if (columnIndex === null) throw new Error(`Invalid testType: ${testType}. Must be unit or e2e`);
 
-  return withLock(cwd, () => {
+  return withLock('.sheriff/.testmap.lock', cwd, () => {
     let content = readFile(TEST_MAP_FILE, cwd);
     if (!content) throw new Error('TEST_MAP.md not found');
 
     // Find the row containing this source file in the Coverage Map table
     // Table format: | Area | File | Unit | E2E | Complexity | Notes |
     const lines = content.split('\n');
-    const matchedRows = [];
+    let matchedRows = [];
+    let inTable = false;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      // Skip non-table rows
-      if (!line.startsWith('|')) continue;
-      // Skip header and separator rows
-      if (line.includes('Area') && line.includes('File')) continue;
-      if (line.match(/^\|[\s-]+\|/)) continue;
+      if (/^\|\s*Area\s*\|\s*File\s*\|\s*Unit\s*\|/.test(line)) { inTable = true; continue; }
+      if (!line.startsWith('|')) { if (inTable) break; continue; }
+      if (!inTable) continue;
+      if (line.match(/^\|(?:\s*:?-+:?\s*\|)+\s*$/)) continue;
 
       // Check if this row contains our source file
-      const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
       if (cells.length < 4) continue;
 
       // cells[1] is the File column — match against sourceFile
@@ -146,6 +89,9 @@ function updateCoverage(sourceFile, testType, status, cwd = process.cwd()) {
         matchedRows.push({ index: i, cells, line });
       }
     }
+
+    const exact = matchedRows.filter(row => normalizePath(row.cells[1]) === normalizePath(sourceFile));
+    if (exact.length) matchedRows = exact;
 
     if (matchedRows.length === 0) {
       return { success: false, reason: `Source file "${sourceFile}" not found in TEST_MAP.md Coverage Map` };
@@ -165,8 +111,8 @@ function updateCoverage(sourceFile, testType, status, cwd = process.cwd()) {
     // Replace the status in the correct column
     // columnIndex 2 = Unit (cells[2]), columnIndex 3 = E2E (cells[3])
     const oldStatus = cells[columnIndex];
-    if (oldStatus === '✅') {
-      // Already marked as tested, no change needed
+    if (oldStatus === icon) {
+      // Same status, no change needed
       return { success: true, sourceFile, testType, status: icon, changed: false };
     }
     cells[columnIndex] = icon;
@@ -201,21 +147,21 @@ function _updateSummaryCounts(content) {
       inTable = true;
       continue;
     }
-    if (line.match(/^\|[\s-]+\|/)) continue;
+    if (line.match(/^\|(?:\s*:?-+:?\s*\|)+\s*$/)) continue;
     if (!inTable) continue;
 
-    const cells = line.split('|').map(c => c.trim()).filter(c => c !== '');
+    const cells = line.split('|').slice(1, -1).map(c => c.trim());
     if (cells.length < 4) continue;
 
     total++;
     const unitStatus = cells[2];
     const e2eStatus = cells[3];
 
-    if (unitStatus === '✅' || unitStatus === '⚠️') unitDone++;
-    else if (unitStatus === '[ ]') unitNeeded++;
+    if (unitStatus === '✅') unitDone++;
+    else if (['[ ]', '⚠️', '❌'].includes(unitStatus)) unitNeeded++;
 
-    if (e2eStatus === '✅' || e2eStatus === '⚠️') e2eDone++;
-    else if (e2eStatus === '[ ]') e2eNeeded++;
+    if (e2eStatus === '✅') e2eDone++;
+    else if (['[ ]', '⚠️', '❌'].includes(e2eStatus)) e2eNeeded++;
 
     // Count NA: files where both unit and e2e are — or ⊘
     if ((unitStatus === '—' || unitStatus === '⊘') && (e2eStatus === '—' || e2eStatus === '⊘')) na++;

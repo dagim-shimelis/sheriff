@@ -6,6 +6,8 @@ Project: {{FRAMEWORK}} / {{TEST_RUNNER}} / {{LANGUAGE}}
 
 {{MOCK_PATTERNS}}
 
+This is a source/test inventory, not measured line or branch coverage. Notes record exact test paths, types, and known missing behaviors.
+
 ## Coverage Map
 
 | Area | File | Unit | E2E | Complexity | Notes |

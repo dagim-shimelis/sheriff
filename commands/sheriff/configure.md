@@ -8,13 +8,7 @@ allowed-tools:
   - Task
 ---
 
-<execution_context>
 Read `{SHERIFF_RUNTIME}` relative to this command file before proceeding.
 Use its runtime paths, tool integration, and install scope.
-</execution_context>
 
-<process>
-Execute the configure workflow:
-
-Read and follow `{SHERIFF_ROOT}/workflows/configure.md`.
-</process>
+Read and follow `{SHERIFF_ROOT}/workflows/configure.md`. Preserve existing answers and project scope.

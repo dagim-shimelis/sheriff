@@ -2,11 +2,12 @@
 phase: {{PHASE_NUM}}
 title: {{PHASE_TITLE}}
 status: {{STATUS}}
-completed_at: {{TIMESTAMP}}
+reported_at: {{TIMESTAMP}}
 subphases_total: {{TOTAL}}
 subphases_passed: {{PASSED}}
 subphases_review: {{REVIEW}}
 subphases_failed: {{FAILED}}
+subphases_pending: {{PENDING}}
 tests_passing: {{TESTS_PASSING}}
 tests_skipped: {{TESTS_SKIPPED}}
 tests_failed: {{TESTS_FAILED}}
@@ -19,11 +20,14 @@ tests_failed: {{TESTS_FAILED}}
 ## What was done
 {{DESCRIPTION}}
 
-## Coverage added
+## Test execution evidence
 
 | Sub-phase | File | Tests | Status |
 |-----------|------|-------|--------|
 {{COVERAGE_TABLE}}
+
+## Commands and evidence limits
+{{EVIDENCE}}
 
 ## Bugs found
 {{BUGS}}

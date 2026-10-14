@@ -1,33 +1,16 @@
 #!/usr/bin/env node
 'use strict';
 
-/**
- * Bundles hook files with esbuild for distribution.
- * Hooks must be single-file bundles — no require() calls at runtime.
- */
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const source = path.resolve(__dirname, '..', 'hooks');
+const destination = path.join(source, 'dist');
+const files = ['sheriff-context-monitor.js', 'sheriff-statusline.js'];
 
-const ROOT = path.resolve(__dirname, '..');
-const HOOKS_SRC = path.join(ROOT, 'hooks');
-const HOOKS_DIST = path.join(ROOT, 'hooks', 'dist');
-
-fs.mkdirSync(HOOKS_DIST, { recursive: true });
-
-const hookFiles = fs.readdirSync(HOOKS_SRC)
-  .filter((f) => f.endsWith('.js') && !f.startsWith('dist'));
-
-for (const file of hookFiles) {
-  const src = path.join(HOOKS_SRC, file);
-  const dest = path.join(HOOKS_DIST, file);
-
-  console.log(`Bundling ${file}...`);
-  execSync(
-    `npx esbuild ${src} --bundle --platform=node --target=node18 --outfile=${dest}`,
-    { stdio: 'inherit' },
-  );
-}
-
-console.log(`\n✅ Built ${hookFiles.length} hook(s) to hooks/dist/`);
+// Hooks use only Node built-ins; copy readable scripts instead of bundling them.
+for (const file of files) execFileSync(process.execPath, ['--check', path.join(source, file)]);
+fs.mkdirSync(destination, { recursive: true });
+for (const file of files) fs.copyFileSync(path.join(source, file), path.join(destination, file));
+console.log(`Built ${files.length} standalone hooks.`);

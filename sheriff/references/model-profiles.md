@@ -1,43 +1,11 @@
-# Sheriff — Model Profiles
+# Model preferences
 
-Sheriff uses three model tiers that the user can configure in `.sheriff.json` under the `models` key.
+Claude Code may use the configured `models.light`, `models.medium`, and `models.heavy` values when the available delegation tool supports them. These are preferences, not a requirement to invoke unavailable models.
 
-## Tiers
+| Tier | Roles |
+| --- | --- |
+| light | Discovery, reporter |
+| medium | Interrogator, planner |
+| heavy | Auditor, executor, syncer |
 
-| Tier | Default | Used by | Reasoning |
-|------|---------|---------|-----------|
-| **light** | haiku | discovery, reporter | File scanning, report assembly — high volume, no deep reasoning needed |
-| **medium** | sonnet | interrogator, planner | Needs reasoning to infer project setup and plan phases correctly |
-| **heavy** | opus | executor | Core work — write, run, fix tests. Most important agent. |
-
-## Configuration
-
-Users can set each tier to `haiku`, `sonnet`, or `opus` in `.sheriff.json`:
-
-```json
-{
-  "models": {
-    "light": "haiku",
-    "medium": "sonnet",
-    "heavy": "opus"
-  }
-}
-```
-
-This is configured during onboarding (`/sheriff:run` or `/sheriff:configure`).
-
-## Agent → Tier Mapping
-
-| Agent | Tier |
-|-------|------|
-| sheriff-interrogator | medium |
-| sheriff-discovery | light |
-| sheriff-planner | medium |
-| sheriff-executor | heavy |
-| sheriff-reporter | light |
-
-## Valid model values
-
-- `haiku` — fastest, cheapest. Good for scanning and assembly tasks.
-- `sonnet` — balanced. Good for planning and reasoning.
-- `opus` — most capable. Best for writing and fixing code.
+The existing Claude defaults are haiku/sonnet/opus. Preserve user choices; inherit if unavailable. Codex runs sequentially with the current model and uses `inherit` for new configuration. Switching hosts must not overwrite shared model preferences. No tier guarantees quality, cost, or speed for a particular project.

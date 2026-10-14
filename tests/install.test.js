@@ -16,7 +16,7 @@ function fixture(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const env = { ...process.env, HOME: home, USERPROFILE: home, NODE_PATH: '', HOOK_DATA: '', TMPDIR: dir, TMP: dir, TEMP: dir };
   const run = (file, args = [], input = '') => spawnSync(process.execPath, [file, ...args], { cwd: project, env, input, encoding: 'utf8', timeout: 10000 });
-  return { dir, home, project, run, setup: (...args) => run(installer, args) };
+  return { dir, home, project, env, run, setup: (...args) => run(installer, args) };
 }
 function ok(result) { assert.equal(result.status, 0, result.stderr || result.stdout); return result.stdout; }
 function put(file, content) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, content); }
@@ -160,10 +160,10 @@ test('installed runtime can claim, complete, update coverage and preserve handof
   ok(f.setup('--tool', 'codex', '--local', '--silent'));
   const cli = path.join(f.project, '.agents/skills/sheriff/bin/sheriff-tools.js');
   ok(f.run(cli, ['init-project']));
-  put(path.join(f.project, '.sheriff/PHASES.md'), '# Phases\n| ID | Title | Status | Tests |\n| 1.1 | utilities | [ ] | 0 |\n\n### 1.1\nlock: —\nlock_time: —\n');
+  put(path.join(f.project, '.sheriff/PHASES.md'), '# Phases\n| ID | Title | Status | Tests |\n| 1.1 | utilities | [ ] | 0 |\n\n### 1.1\n```\nlock: —\nlock_time: —\n```\n');
   put(path.join(f.project, '.sheriff/TEST_MAP.md'), '| Area | File | Unit | E2E | Complexity | Notes |\n|------|------|------|-----|------------|-------|\n| util | src/add.js | ❌ needed | — N/A | low | |\n');
   assert.equal(JSON.parse(ok(f.run(cli, ['claim-subphase', '1.1', 'executor-1', '--raw']))).success, true);
-  assert.match(read(path.join(f.project, '.sheriff/PHASES.md')), /🔒 executor-1/);
+  assert.match(read(path.join(f.project, '.sheriff/PHASES.md')), /lock: executor-1/);
   assert.equal(JSON.parse(ok(f.run(cli, ['mark-complete', '1.1', 'pass', '--raw']))).success, true);
   assert.match(read(path.join(f.project, '.sheriff/PHASES.md')), /✅/);
   assert.equal(JSON.parse(ok(f.run(cli, ['update-testmap', 'src/add.js', 'unit', 'tested', '--raw']))).success, true);
@@ -194,13 +194,21 @@ test('Claude hooks accept stdin, preserve quoted paths, and report context warni
 
 test('published tarball includes the Codex integration and installs without package dependencies', (t) => {
   const f = fixture(t);
-  const packed = spawnSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', f.dir], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+  const npmCli = process.env.npm_execpath;
+  assert.ok(npmCli, 'Run packaging checks through npm test.');
+  const packed = spawnSync(process.execPath, [npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', f.dir], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
   const manifest = JSON.parse(ok(packed))[0];
   const files = manifest.files.map((file) => file.path);
-  for (const expected of ['integrations/codex/SKILL.md', 'sheriff/runtime.md', 'bin/install.js', 'workflows/run.md', 'hooks/dist/sheriff-context-monitor.js']) assert.ok(files.includes(expected), expected);
+  for (const expected of ['LICENSE', 'integrations/codex/SKILL.md', 'sheriff/runtime.md', 'bin/install.js', 'workflows/run.md', 'hooks/dist/sheriff-context-monitor.js']) assert.ok(files.includes(expected), expected);
   assert.equal(files.some((file) => file.startsWith('tests/') || file.startsWith('node_modules/')), false);
-  ok(spawnSync('tar', ['-xzf', path.join(f.dir, manifest.filename), '-C', f.dir], { encoding: 'utf8' }));
-  ok(f.run(path.join(f.dir, 'package/bin/install.js'), ['--tool', 'both', '--local', '--silent']));
+  const installed = spawnSync(process.execPath, [npmCli, 'exec', '--offline', '--yes',
+    `--package=${path.join(f.dir, manifest.filename)}`, '--', 'sheriff', '--tool', 'both', '--local', '--silent'], {
+    cwd: f.project,
+    env: { ...f.env, npm_config_cache: path.join(f.dir, 'npm-cache') },
+    encoding: 'utf8', timeout: 30000,
+  });
+  ok(installed);
+  assert.ok(fs.existsSync(path.join(f.project, '.claude/commands/sheriff/run.md')));
   const cli = path.join(f.project, '.agents/skills/sheriff/bin/sheriff-tools.js');
   ok(f.run(cli, ['init-project']));
   assert.deepEqual(JSON.parse(ok(f.run(cli, ['get-status']))), { initialized: false });

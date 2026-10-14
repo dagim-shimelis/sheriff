@@ -18,9 +18,9 @@
  *   write-result <id>             Read result content from stdin and write
  *   assemble-results <phaseNum>   Concatenate all phase results into one file
  *   write-summary <phaseNum>      Read summary from stdin and write phase summary
- *   git-checkpoint <id>           Create a checkpoint git commit
- *   git-commit <id> [msg]         Create a success git commit
- *   git-rollback                  Reset to last commit
+ *   git-checkpoint <id>           Read the current git HEAD without changing files
+ *   git-commit <id> [msg] -- <files...> Commit explicit files only
+ *   git-rollback                  Refuse unsafe automatic rollback
  *   update-testmap <file> <type> <status>  Update TEST_MAP.md coverage (type: unit|e2e, status: tested|review|failed)
  *   check-stale-locks             List stale locks and orphaned lock files
  *   cleanup-handoffs              Delete all handoff files
@@ -60,14 +60,20 @@ function findPackageJson() {
 }
 
 const args = process.argv.slice(2);
-const rawIndex = args.indexOf('--raw');
+const separator = args.indexOf('--');
+const rawIndex = args.findIndex((arg, index) => arg === '--raw' && (separator < 0 || index < separator));
 const raw = rawIndex !== -1;
 if (raw) args.splice(rawIndex, 1);
 
 const command = args[0];
+if (!command || command === '--help' || command === '-h') {
+  process.stdout.write(fs.readFileSync(__filename, 'utf8').match(/\/\*\*([\s\S]*?)\*\//)[1].replace(/^ \* ?/gm, '').trim() + '\n');
+  process.exit(0);
+}
 const cwd = process.cwd();
 
 function out(data) {
+  if (data?.success === false) process.exitCode = 1;
   if (raw || typeof data !== 'string') {
     process.stdout.write(JSON.stringify(data) + '\n');
   } else {
@@ -92,10 +98,17 @@ const requiresSheriffDir = new Set([
   'git-checkpoint', 'git-commit',
 ]);
 
-if (requiresSheriffDir.has(command) && !fs.existsSync(path.join(cwd, '.sheriff'))) {
+try {
+if (requiresSheriffDir.has(command) && !state.fileExists('.sheriff', cwd)) {
   err('.sheriff/ directory not found. Run init-project first.');
 }
 
+const arity = { init: [1, 2], 'claim-subphase': [2, 2], 'release-subphase': [1, 2], 'check-release': [1, 1], 'mark-complete': [2, 2], 'write-handoff': [1, 1], 'read-handoff': [1, 1], 'write-result': [1, 1], 'assemble-results': [1, 1], 'write-summary': [1, 1], 'git-checkpoint': [1, 1], 'git-rollback': [0, 1], 'update-testmap': [3, 3] };
+const noArgs = ['check-stale-locks', 'cleanup-handoffs', 'get-status', 'init-project', 'read-config', 'write-config', 'config-exists', 'check-config-version', 'print-banner', 'check-update', 'current-version'];
+if (noArgs.includes(command)) arity[command] = [0, 0];
+if (arity[command] && (args.length - 1 < arity[command][0] || args.length - 1 > arity[command][1])) throw new Error(`Invalid number of arguments for ${command}`);
+if (command === 'release-subphase' && args.length === 3 && !args.includes('--force')) throw new Error('release-subphase only accepts --force');
+if (command !== 'git-commit' && args.slice(1).some(arg => arg.startsWith('--') && !(command === 'release-subphase' && arg === '--force'))) throw new Error('Unknown option');
 switch (command) {
   case 'init': {
     const stage = args[1];
@@ -104,15 +117,12 @@ switch (command) {
 
     const cfg = config.readConfig(cwd);
     const phasesContent = state.readFile(state.PHASES_FILE, cwd);
-    const testMap = state.readFile(state.TEST_MAP_FILE, cwd);
     const status = state.getStatus(cwd);
 
     let subphaseBlock = null;
     if (subphaseId && phasesContent) {
-      const sectionMatch = phasesContent.match(
-        new RegExp(`### ${subphaseId.replace(/\./g, '\\.')}[\\s\\S]*?(?=\\n### |$)`),
-      );
-      if (sectionMatch) subphaseBlock = sectionMatch[0];
+      state.validateId(subphaseId, 'subphase');
+      subphaseBlock = phases.parseSubphases(phasesContent).find(phase => phase.id === subphaseId)?.block || null;
     }
 
     const handoff = subphaseId ? state.readHandoff(subphaseId, cwd) : null;
@@ -229,10 +239,12 @@ switch (command) {
   }
 
   case 'git-commit': {
-    const [, subphaseId, ...msgParts] = args;
+    const end = args.indexOf('--');
+    const files = end < 0 ? [] : args.slice(end + 1);
+    const [, subphaseId, ...msgParts] = end < 0 ? args : args.slice(0, end);
     if (!subphaseId) err('git-commit requires <id>');
     const msg = msgParts.join(' ') || null;
-    const result = git.commitSuccess(subphaseId, msg, cwd);
+    const result = git.commitSuccess(subphaseId, msg, cwd, files);
     out(result);
     break;
   }
@@ -274,7 +286,6 @@ switch (command) {
 
   case 'init-project': {
     state.ensureSheriffDir(cwd);
-    fs.mkdirSync(path.join(cwd, results.RESULTS_DIR), { recursive: true });
     out({ success: true, dir: state.SHERIFF_DIR });
     break;
   }
@@ -318,17 +329,20 @@ switch (command) {
   }
 
   case 'check-update': {
-    const { execSync } = require('child_process');
+    const { execFileSync } = require('child_process');
     const pkg = findPackageJson();
     const currentVersion = pkg.version;
     const packageName = pkg.name;
     try {
-      const latest = execSync(`npm view ${packageName} version`, {
+      const latest = execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['view', packageName, 'version'], {
         encoding: 'utf8',
         timeout: 10000,
         stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
-      const updateAvailable = latest !== currentVersion;
+      const parse = value => /^\d+\.\d+\.\d+$/.test(value) ? value.split('.').map(Number) : null;
+      const current = parse(currentVersion), remote = parse(latest);
+      const difference = current && remote ? remote.findIndex((value, index) => value !== current[index]) : -1;
+      const updateAvailable = difference >= 0 && remote[difference] > current[difference];
       out({ currentVersion, latestVersion: latest, updateAvailable });
       process.exit(updateAvailable ? 1 : 0);
     } catch (e) {
@@ -346,5 +360,7 @@ switch (command) {
   }
 
   default:
-    err(`Unknown command: ${command || '(none)'}\nRun with no args to see usage.`);
+    err(`Unknown command: ${command}. Run --help to see usage.`);
 }
+
+} catch (error) { err(error.message); }
