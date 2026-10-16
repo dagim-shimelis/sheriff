@@ -113,14 +113,31 @@ Choose `--tool both` for both integrations. Installed `update` commands retain t
 
 Codex installation does not modify AGENTS.md or Codex configuration. Local runtime references are relative; Claude hook registration should be rerun after moving a project to another machine. Other AI tools are not yet supported integrations.
 
+## Benchmarks
+
+Local runtime snapshot (2026-10-16): Apple M4 Pro, darwin/arm64, Node v22.18.0. Medians from 15 samples after 3 warmups. Measured source: `eb6a9e0` plus uncommitted changes; the exact runtime hash and raw samples are in the [snapshot](benchmarks/snapshots/2026-10-16-local.json).
+
+| Sub-phases | Parse plan | Status CLI |
+| --- | ---: | ---: |
+| 3 | 0.005 ms | 25.464 ms |
+| 100 | 0.118 ms | 25.207 ms |
+| 1,000 | 0.869 ms | 29.488 ms |
+
+These are synthetic canonical plans without result summaries; CLI timings include Node startup. This development snapshot is not a release or hosted CI baseline, and does not measure AI workflow speed.
+
+Run `npm run benchmark`. The [benchmark workflow](.github/workflows/benchmark.yml) produces PR base/head comparisons in Actions summaries and retains raw results for 30 days. [Methodology and durable history](benchmarks/README.md) describe how to reproduce measurements and save release snapshots.
+
 ## Development and verification
 
 ```bash
 npm test
+npm run benchmark
 npm pack --dry-run
 ```
 
 There are no package dependencies. Hook builds use Node's syntax check and copy the standalone scripts. `pretest` and `prepack` rebuild hooks; `prepublishOnly` runs tests. Tests use temporary homes/projects for installation, runtime state, recovery, and packaging contracts.
+
+`npm run --silent benchmark -- --json` emits machine-readable samples and provenance. `npm run --silent benchmark:report -- <current.json> [baseline.json]` renders a Markdown summary, suppressing percentage comparisons for incompatible runs. Both commands run locally without model or network calls.
 
 These checks do not prove live model-driven test generation in Claude Code or Codex, every framework/runner combination, or production/browser-service behavior. Before release, exercise the complete run/resume/audit/sync flow in each host against disposable example projects.
 

@@ -20,6 +20,8 @@
     "build:hooks": "node scripts/build-hooks.js",
     "pretest": "npm run build:hooks",
     "test": "node --test tests/*.test.js",
+    "benchmark": "node scripts/benchmark.js",
+    "benchmark:report": "node scripts/benchmark-report.js",
     "test:live:codex": "node tests/live/run.js codex",
     "test:live:claude": "node tests/live/run.js claude",
     "prepack": "npm run build:hooks",
