@@ -1,5 +1,9 @@
 # Sheriff
 
+<div align="center">
+  <img src="https://res.cloudinary.com/drhjbn19m/image/upload/v1773264369/packages/banner_yka1qn.png" alt="Sheriff" width="600">
+</div>
+
 Test workflows for **Claude Code and Codex**, distributed through npm. Sheriff discovers test gaps, plans work, writes and runs tests, reviews source defects, and synchronizes tests after changes. It uses your existing AI session and test runner; no separate model API key is required.
 
 Sheriff supplies instructions and a local state CLI. Your AI tool performs the code analysis and edits. Test generation quality still depends on the project, runner setup, and model; a file inventory is not a measured coverage percentage.
