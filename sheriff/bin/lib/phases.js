@@ -25,9 +25,11 @@ function parseSubphases(content) {
     const block = content.slice(start, end);
     const metadata = block.match(/^```[^\n]*\n([\s\S]*?)^```/m)?.[1] || '';
     const field = key => metadata.match(new RegExp(`^${key}:[ \t]*([^\\n]*)`, 'm'))?.[1].trim();
-    const legacy = content.match(new RegExp(`^\\|\\s*${escapeRegex(id)}\\s*\\|[^|]*\\|\\s*([^|]*)\\|`, 'm'))?.[1].trim();
     let status = field('status');
-    if (!status) status = Object.keys(icons).find(key => legacy?.startsWith(icons[key])) || (field('lock') && field('lock') !== '—' ? 'in_progress' : 'pending');
+    if (!status) {
+      const legacy = content.match(new RegExp(`^\\|\\s*${escapeRegex(id)}\\s*\\|[^|]*\\|\\s*([^|]*)\\|`, 'm'))?.[1].trim();
+      status = Object.keys(icons).find(key => legacy?.startsWith(icons[key])) || (field('lock') && field('lock') !== '—' ? 'in_progress' : 'pending');
+    }
     if (!Object.hasOwn(icons, status)) throw new Error(`Invalid status for ${id}: ${status}`);
     return { id, start, end, block, status, wave: Number(field('wave')), agentId: field('lock') || '—', lockTime: field('lock_time') || '—' };
   });

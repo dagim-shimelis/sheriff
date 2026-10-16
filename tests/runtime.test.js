@@ -36,6 +36,16 @@ function concurrent(cwd, args) {
   });
 }
 
+test('canonical status takes precedence while legacy table and lock fallbacks remain supported', () => {
+  const legacy = '| 1.10 | Tenth | ❌ |\n| 1.1 | First | ✅ |\n' + plan(['1.1', '1.10', '1.2']);
+  const statuses = content => phases.parseSubphases(content).map(phase => phase.status);
+  assert.deepEqual(statuses(legacy), ['pass', 'fail', 'pending']);
+  assert.deepEqual(statuses(legacy.replaceAll('wave: 1', 'status: review\nwave: 1')), ['review', 'review', 'review']);
+  assert.deepEqual(statuses(legacy.replaceAll('wave: 1', 'status: \nwave: 1')), ['pass', 'fail', 'pending']);
+  assert.deepEqual(statuses(legacy.replaceAll('lock: —', 'lock: worker')), ['pass', 'fail', 'in_progress']);
+  assert.throws(() => statuses(legacy.replace('wave: 1', 'status: unknown\nwave: 1')), /Invalid status for 1\.1/);
+});
+
 test('canonical plan claims exact IDs, tracks failures and only completes fully finished phases', t => {
   const cwd = fixture(t);
   state.writeFile(state.PHASES_FILE, plan(['1.1', '1.10']), cwd);
