@@ -1,20 +1,50 @@
-# Sheriff
+<h1 align="center">Sheriff</h1>
 
 <div align="center">
   <img src="https://res.cloudinary.com/drhjbn19m/image/upload/v1773264369/packages/banner_yka1qn.png" alt="Sheriff" width="600">
 </div>
 
-Test workflows for **Claude Code and Codex**, distributed through npm. Sheriff discovers test gaps, plans work, writes and runs tests, reviews source defects, and synchronizes tests after changes. It uses your existing AI session and test runner; no separate model API key is required.
+<h2 align="center">Big ideas. <em>Fewer blind spots.</em></h2>
 
-Sheriff supplies instructions and a local state CLI. Your AI tool performs the code analysis and edits. Test generation quality still depends on the project, runner setup, and model; a file inventory is not a measured coverage percentage.
+<p align="center">
+  Sheriff finds test gaps, writes and runs tests, and keeps them aligned with your changes—in Claude Code or Codex.
+  <br>
+  <em>A deputy for your codebase.</em>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@dagim_codes/sheriff"><img src="https://img.shields.io/npm/v/%40dagim_codes%2Fsheriff?style=flat-square&amp;label=npm&amp;labelColor=203c34&amp;color=f4d447" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f4d447?style=flat-square&amp;labelColor=203c34" alt="MIT license"></a>
+  <a href="#install"><img src="https://img.shields.io/badge/node-%E2%89%A518-203c34?style=flat-square&amp;labelColor=203c34" alt="Node.js 18 or newer"></a>
+  <a href="#use"><img src="https://img.shields.io/badge/AI_tools-Claude_Code_%2B_Codex-203c34?style=flat-square&amp;labelColor=203c34" alt="Supports Claude Code and Codex"></a>
+</p>
+
+<p align="center">
+  <a href="https://sheriff.dagim.codes">Website</a> ·
+  <a href="https://sheriff.dagim.codes/docs">Field guide</a> ·
+  <a href="#install">Quick start</a> ·
+  <a href="#how-it-works">How it works</a>
+</p>
+
+---
 
 ## Install
+
+*Saddle up. A small install. A better habit.*
 
 ```bash
 npx @dagim_s/sheriff
 ```
 
-Choose Claude Code, Codex, or both, then project or user scope. Explicit commands:
+Choose Claude Code, Codex, or both, then project or user scope. Open your AI tool in the project and start:
+
+| Claude Code | Codex |
+| --- | --- |
+| `/sheriff:run` | `$sheriff run` |
+
+Sheriff uses your existing AI session and test runner; no separate model API key is required. Restart your tool if the newly installed commands or skill aren't visible yet.
+
+Explicit install commands:
 
 ```bash
 npx @dagim_s/sheriff --tool claude --local
@@ -25,6 +55,41 @@ npx @dagim_s/sheriff --tool both --global
 `--tool claude,codex` also selects both. Existing commands with `--local` or `--global` but no `--tool` target Claude Code. Non-interactive use requires a scope; add `--silent` to suppress normal output. `npm install` downloads the package; `npx` runs the installer.
 
 Requirements: Node.js 18+, a supported AI tool with file/shell access, and a JavaScript or TypeScript project. Sheriff reuses existing runners and can help configure a missing runner within your authorized scope. Browser/service-dependent tests require their own working environment.
+
+## From your first test to every change after
+
+A lot can hide between *“it works”* and *“it’s tested.”* Choose the workflow that fits the work in front of you.
+
+| Workflow | What Sheriff does |
+| --- | --- |
+| **Run** | **Cover the unknown.** Map test gaps, plan by risk, and write and run tests with your project's runner. Resume unfinished work with saved handoffs. |
+| **Audit** | **Look a little closer.** Review source defects and report findings. You choose which fixes to authorize. |
+| **Sync** | **Keep it covered.** Review current source changes and update affected tests, including missing assertions when existing tests still pass. |
+
+## How it works
+
+Sheriff guides your AI tool through specialized testing roles, keeping the plan and results in your project.
+
+```mermaid
+flowchart TD
+    accTitle: Sheriff's testing workflow
+    accDescr: Discover gaps, plan work, optionally audit source, write and run tests, and report results.
+    discover["Discover test gaps"] --> plan["Plan by risk"]
+    plan --> audit["Audit (optional)"]
+    audit --> test["Write & run tests"]
+    test --> report["Report results"]
+
+    classDef paper fill:#f4f1e9,stroke:#203c34,color:#203c34
+    classDef forest fill:#203c34,stroke:#203c34,color:#f4f1e9
+    classDef yellow fill:#f4d447,stroke:#203c34,color:#203c34
+    class discover,plan paper
+    class audit,test forest
+    class report yellow
+```
+
+Auditing is optional. After source changes, use **Sync** to review the changes and bring affected tests up to date.
+
+Sheriff supplies instructions and a local state CLI. Your AI tool performs the code analysis and edits. Test generation quality still depends on the project, runner setup, and model; a file inventory is not a measured coverage percentage.
 
 ## Use
 
