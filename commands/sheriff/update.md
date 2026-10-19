@@ -14,7 +14,7 @@ Run `check-update --raw` and parse its JSON, including exit 1 for an available u
 When an update is available, use the tool and scope recorded in runtime.md:
 
 ```bash
-npx @dagim_s/sheriff@latest --tool {INSTALL_TOOL} --{INSTALL_SCOPE} --silent
+npx @dagim_codes/sheriff@latest --tool {INSTALL_TOOL} --{INSTALL_SCOPE} --silent
 ```
 
 For local installations, execute in the project directory containing this installation, not a nested working directory. Preserve user overrides for installation paths. Check installer exit status before reading `current-version --raw` again; verify it matches the expected published version. Report failures instead of claiming success. Project `.sheriff/` state and tests are separate from the installed runtime.

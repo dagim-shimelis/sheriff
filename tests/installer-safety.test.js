@@ -65,6 +65,32 @@ test('update removes obsolete inventoried files and uninstall retains personal i
   assert.equal(fs.existsSync(path.join(root, 'SKILL.md')), false);
 });
 
+test('old npm scope supports upgrade and uninstall while foreign package names are rejected', (t) => {
+  for (const uninstall of [false, true]) {
+    const f = fixture(t);
+    ok(f.setup(local));
+    const packages = ['.claude/sheriff/package.json', '.agents/skills/sheriff/package.json']
+      .map((relative) => path.join(f.project, relative));
+    const args = uninstall ? [...local, '--uninstall'] : local;
+    for (const file of packages) put(file, JSON.stringify({ name: '@someone-else/sheriff' }));
+    const rejected = f.setup(args);
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /not a Sheriff installation/);
+    for (const file of packages) {
+      assert.equal(JSON.parse(read(file)).name, '@someone-else/sheriff');
+      put(file, JSON.stringify({ name: '@dagim_s/sheriff' }));
+    }
+    const state = path.join(f.project, '.sheriff/personal.md');
+    put(state, 'keep project state');
+    ok(f.setup(args));
+    assert.equal(read(state), 'keep project state');
+    for (const file of packages) {
+      if (uninstall) assert.equal(fs.existsSync(file), false);
+      else assert.equal(JSON.parse(read(file)).name, require('../package.json').name);
+    }
+  }
+});
+
 test('local hook migration preserves global and unrelated same-basename hooks', (t) => {
   const f = fixture(t);
   ok(f.setup(['--global']));

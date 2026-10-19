@@ -1,5 +1,5 @@
 {
-  "name": "@dagim_s/sheriff",
+  "name": "@dagim_codes/sheriff",
   "version": "0.1.5",
   "description": "Test coverage workflows for Claude Code and Codex: discover, audit, generate, and sync tests.",
   "keywords": [
@@ -12,7 +12,7 @@
     "automation"
   ],
   "license": "MIT",
-  "author": "dagim_s",
+  "author": "dagim_codes",
   "bin": {
     "sheriff": "./bin/install.js"
   },

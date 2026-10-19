@@ -1,4 +1,4 @@
-name: Publish to npm
+name: Stage npm release
 
 on:
   release:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  stage:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -30,7 +30,10 @@ jobs:
             throw new Error('Release tag must match package.json version.');
           }
           NODE
+      - name: Use npm with staged publishing support
+        run: npm install --global npm@11.19.0
       - run: npm ci --ignore-scripts
-      - run: npm publish
+      - name: Stage package for approval
+        run: npm stage publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

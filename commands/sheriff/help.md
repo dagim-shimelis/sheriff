@@ -29,7 +29,7 @@ Read `current-version --raw` and show a concise guide using this host's invocati
 
 Explain that `.sheriff/` is shared project state, test files live in the project's normal test locations, Codex executes roles sequentially, and Claude delegation depends on host permissions. Commits and source fixes respect user authorization/configuration. Failing regressions remain visible; skipped or unexecuted tests do not count as a successful run. Test inventory is not measured line/branch coverage.
 
-Installation: `npx @dagim_s/sheriff --tool {INSTALL_TOOL} --{INSTALL_SCOPE}`.
-Uninstall this integration: `npx @dagim_s/sheriff --tool {INSTALL_TOOL} --{INSTALL_SCOPE} --uninstall`.
+Installation: `npx @dagim_codes/sheriff --tool {INSTALL_TOOL} --{INSTALL_SCOPE}`.
+Uninstall this integration: `npx @dagim_codes/sheriff --tool {INSTALL_TOOL} --{INSTALL_SCOPE} --uninstall`.
 
 Do not promise autonomous perfect coverage, universal framework support, or recovery of unsaved work.

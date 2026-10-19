@@ -35,7 +35,7 @@ function parseArgs(args) {
 }
 
 function help() {
-  console.log(`Sheriff installer\n\nUsage: npx @dagim_s/sheriff [--tool claude|codex|both] [--local|--global]\n\n  --tool claude,codex  Install for both tools (also: --tool both)\n  --local             Install for the current project\n  --global            Install for all your projects\n  --uninstall         Remove the selected integrations; keep project state and tests\n  --silent            Suppress progress output; requires an explicit scope\n  --help              Show this help\n\nWithout flags, choose tools and scope interactively. Existing --local/--global\ncommands without --tool continue to target Claude Code.`);
+  console.log(`Sheriff installer\n\nUsage: npx ${pkg.name} [--tool claude|codex|both] [--local|--global]\n\n  --tool claude,codex  Install for both tools (also: --tool both)\n  --local             Install for the current project\n  --global            Install for all your projects\n  --uninstall         Remove the selected integrations; keep project state and tests\n  --silent            Suppress progress output; requires an explicit scope\n  --help              Show this help\n\nWithout flags, choose tools and scope interactively. Existing --local/--global\ncommands without --tool continue to target Claude Code.`);
 }
 
 function ask(rl, question) {
@@ -122,7 +122,7 @@ function preflight(tool, base, scope, uninstall) {
   assertFile(packageFile, base);
   assertFile(manifestFile, base);
   const installed = fs.existsSync(root);
-  if (installed && (!fs.existsSync(packageFile) || JSON.parse(fs.readFileSync(packageFile, 'utf8')).name !== pkg.name)) {
+  if (installed && (!fs.existsSync(packageFile) || ![pkg.name, '@dagim_s/sheriff'].includes(JSON.parse(fs.readFileSync(packageFile, 'utf8')).name))) {
     throw new Error(`Existing directory is not a Sheriff installation: ${root}`);
   }
   const files = new Map();

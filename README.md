@@ -33,7 +33,7 @@
 *Saddle up. A small install. A better habit.*
 
 ```bash
-npx @dagim_s/sheriff
+npx @dagim_codes/sheriff
 ```
 
 Choose Claude Code, Codex, or both, then project or user scope. Open your AI tool in the project and start:
@@ -47,9 +47,9 @@ Sheriff uses your existing AI session and test runner; no separate model API key
 Explicit install commands:
 
 ```bash
-npx @dagim_s/sheriff --tool claude --local
-npx @dagim_s/sheriff --tool codex --local
-npx @dagim_s/sheriff --tool both --global
+npx @dagim_codes/sheriff --tool claude --local
+npx @dagim_codes/sheriff --tool codex --local
+npx @dagim_codes/sheriff --tool both --global
 ```
 
 `--tool claude,codex` also selects both. Existing commands with `--local` or `--global` but no `--tool` target Claude Code. Non-interactive use requires a scope; add `--silent` to suppress normal output. `npm install` downloads the package; `npx` runs the installer.
@@ -167,8 +167,8 @@ Claude installation includes a statusline and context monitor while preserving a
 Use the same tool and scope as installation:
 
 ```bash
-npx @dagim_s/sheriff@latest --tool codex --local
-npx @dagim_s/sheriff --tool codex --local --uninstall
+npx @dagim_codes/sheriff@latest --tool codex --local
+npx @dagim_codes/sheriff --tool codex --local --uninstall
 ```
 
 Choose `--tool both` for both integrations. Installed `update` commands retain their tool and scope. Updates/uninstall preserve project `.sheriff/` and tests. The installer tracks its files, preserves unknown files/settings, and refuses unrelated destination collisions. Normal I/O failures roll back installation writes; abrupt process or machine termination is not a transactional filesystem guarantee.
