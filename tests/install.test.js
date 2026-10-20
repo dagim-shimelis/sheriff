@@ -236,22 +236,12 @@ test('Claude hooks accept stdin, preserve quoted paths, and report context warni
   assert.equal(ok(f.run(path.join(f.project, '.claude/hooks/sheriff-context-monitor.js'), [], '{bad JSON')), '');
 });
 
-test('local setup requires a declared and installed package and fails before writing adapters', (t) => {
-  const f = fixture(t, false);
-  let result = f.setup('--tool', 'both', '--local', '--silent');
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /npm install --save-dev @dagim_codes\/sheriff@latest/);
-  assert.deepEqual(fs.readdirSync(f.project), []);
-  installPackage(f.project);
-  put(path.join(f.project, 'package.json'), '{"private":true}');
-  result = f.setup('--tool', 'both', '--local', '--silent');
-  assert.notEqual(result.status, 0, 'An undeclared package must not provide a persistent project runtime');
-  assert.equal(fs.existsSync(path.join(f.project, '.agents')), false);
-  assert.equal(fs.existsSync(path.join(f.project, '.claude')), false);
-  put(path.join(f.project, 'package.json'), JSON.stringify({ devDependencies: { '@dagim_codes/sheriff': '0.1.5' } }));
+test('local setup rejects an incomplete installed runtime before writing adapters', (t) => {
+  const f = fixture(t);
   fs.rmSync(path.join(f.packageRoot, 'dist/codex'), { recursive: true });
   assert.notEqual(f.setup('--tool', 'both', '--local', '--silent').status, 0);
   assert.equal(fs.existsSync(path.join(f.project, '.claude')), false);
+  assert.equal(fs.existsSync(path.join(f.project, '.agents')), false);
 });
 
 test('local runtime survives a project move and re-registration refreshes Claude statusline paths', (t) => {

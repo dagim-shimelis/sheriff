@@ -37,7 +37,9 @@ test('offline dependency reinstall restores package-backed runtime without repla
     : spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, { cwd, env: f.env, encoding: 'utf8', timeout: 30000, shell: process.platform === 'win32' });
   const packed = JSON.parse(ok(npm(['pack', '--ignore-scripts', '--json', '--pack-destination', f.dir], ROOT)))[0];
   const npmFlags = ['--offline', '--ignore-scripts', '--no-audit', '--no-fund'];
-  ok(npm(['install', '--save-dev', ...npmFlags, path.join(f.dir, packed.filename)]));
+  fs.writeFileSync(path.join(f.project, 'package.json'), JSON.stringify({ private: true, devDependencies: { [pkg.name]: `file:${path.join(f.dir, packed.filename)}` } }));
+  Object.assign(f.env, { npm_config_offline: 'true', npm_config_ignore_scripts: 'true' });
+  ok(f.run(path.join(ROOT, 'bin/install.js'), ['--tool', 'both', '--local', '--silent']));
   ok(npm(['exec', '--offline', '--', 'sheriff', '--tool', 'both', '--local', '--silent']));
 
   const packageRoot = path.join(f.project, 'node_modules', pkg.name);
@@ -91,4 +93,65 @@ test('local registration uses the installed package version and rejects inconsis
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /mismatched codex runtime metadata/);
   assert.equal(read(adapter), before);
+});
+
+for (const existingManifest of [false, true]) {
+  test(`local setup automatically installs an undeclared dependency (manifest: ${existingManifest})`, (t) => {
+    const f = fixture(t);
+    if (existingManifest) fs.writeFileSync(path.join(f.project, 'package.json'), '{"private":true}');
+    const preload = path.join(f.dir, 'npm-stub.cjs');
+    fs.writeFileSync(preload, `
+      const assert = require('node:assert/strict');
+      require('node:child_process').spawnSync = (command, args, options) => {
+        assert.equal(command, process.platform === 'win32' ? 'npm.cmd' : 'npm');
+        assert.deepEqual(args, ['install', '--prefix', '.', '--include=dev', '--no-audit', '--no-fund', '--save-dev', ${JSON.stringify(`${pkg.name}@${pkg.version}`)}]);
+        assert.equal(options.cwd, process.cwd());
+        require(${JSON.stringify(path.join(ROOT, 'tests/fixtures/install-package.js'))}).installPackage(process.cwd());
+        return { status: 0 };
+      };
+    `);
+    f.env.NODE_OPTIONS = `--require=${preload}`;
+    ok(f.run(path.join(ROOT, 'bin/install.js'), ['--tool', 'both', '--local', '--silent']));
+    assert.ok(fs.existsSync(path.join(f.project, '.agents/skills/sheriff/SKILL.md')));
+    assert.ok(fs.existsSync(path.join(f.project, '.claude/settings.json')));
+    assert.equal(fs.existsSync(path.join(f.project, '.sheriff-installer.lock')), false);
+  });
+}
+
+test('npm failure leaves adapters untouched and releases the installer lock', (t) => {
+  const f = fixture(t);
+  const preload = path.join(f.dir, 'npm-failure.cjs');
+  fs.writeFileSync(preload, `require('node:child_process').spawnSync = () => ({ status: 1, stderr: 'registry unavailable' });`);
+  f.env.NODE_OPTIONS = `--require=${preload}`;
+  const result = f.run(path.join(ROOT, 'bin/install.js'), ['--tool', 'both', '--local', '--silent']);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /registry unavailable/);
+  assert.deepEqual(fs.readdirSync(f.project), []);
+});
+
+test('local setup rejects a self-dependency and malformed project metadata', (t) => {
+  const f = fixture(t);
+  for (const metadata of [{ name: pkg.name }, null, [], '{bad json']) {
+    fs.writeFileSync(path.join(f.project, 'package.json'), typeof metadata === 'string' ? metadata : JSON.stringify(metadata));
+    const result = f.run(path.join(ROOT, 'bin/install.js'), ['--tool', 'both', '--local', '--silent']);
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(fs.readdirSync(f.project), ['package.json']);
+  }
+});
+
+test('Yarn Plug’n’Play stops before dependency or adapter writes', (t) => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.project, 'package.json'), JSON.stringify({ packageManager: 'yarn@4.0.0' }));
+  const preload = path.join(f.dir, 'yarn-pnp.cjs');
+  fs.writeFileSync(preload, `
+    require('node:child_process').spawnSync = (command, args) => {
+      require('node:assert/strict').deepEqual(args, ['config', 'get', 'nodeLinker']);
+      return { status: 0, stdout: 'pnp\\n' };
+    };
+  `);
+  f.env.NODE_OPTIONS = `--require=${preload}`;
+  const result = f.run(path.join(ROOT, 'bin/install.js'), ['--tool', 'both', '--local', '--silent']);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Plug’n’Play/);
+  assert.deepEqual(fs.readdirSync(f.project), ['package.json']);
 });

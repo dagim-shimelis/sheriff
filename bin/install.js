@@ -4,8 +4,9 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const readline = require('readline');
-const { printBanner } = require('../sheriff/bin/lib/banner');
+const { select } = require('./lib/select');
+const { packageManager, installArgs } = require('./lib/package-manager');
+const { spawnSync } = require('child_process');
 const pkg = require('../package.json');
 const ROOT = path.resolve(__dirname, '..');
 const TOOLS = ['claude', 'codex'];
@@ -45,18 +46,7 @@ function parseArgs(args) {
 }
 
 function help() {
-  console.log(`Sheriff installer\n\nUsage: npx ${pkg.name}@latest [--tool claude|codex|both] [--local|--global]\n\n  --tool claude,codex  Install for both tools (also: --tool both)\n  --local             Register the current project's installed npm dependency\n  --global            Install for all your projects\n  --uninstall         Remove the selected integrations; keep project state and tests\n  --silent            Suppress progress output; requires an explicit scope\n  --help              Show this help\n\nLocal setup first requires npm install --save-dev ${pkg.name}@latest.\nWithout flags, choose tools and scope interactively. Existing --local/--global\ncommands without --tool continue to target Claude Code.`);
-}
-
-function ask(rl, question) {
-  return new Promise((resolve, reject) => {
-    const onClose = () => reject(new Error('Installation cancelled before a selection was made.'));
-    rl.once('close', onClose);
-    rl.question(question, (answer) => {
-      rl.removeListener('close', onClose);
-      resolve(answer.trim().toLowerCase());
-    });
-  });
+  console.log(`Sheriff installer\n\nUsage: npx ${pkg.name}@latest [--tool claude|codex|both] [--local|--global]\n\n  --tool claude,codex  Install for both tools (also: --tool both)\n  --local             Install the project dependency and register integrations\n  --global            Install for all your projects\n  --uninstall         Remove the selected integrations; keep project state and tests\n  --silent            Suppress progress output; requires an explicit scope\n  --help              Show this help\n\nLocal setup automatically installs ${pkg.name} when needed.\nWithout flags, choose tools and scope interactively. Existing --local/--global\ncommands without --tool continue to target Claude Code.`);
 }
 
 function readSettings(dir) {
@@ -130,6 +120,30 @@ function collect(src, dest, tool, scope, files) {
     for (const file of fs.readdirSync(src)) collect(path.join(src, file), path.join(dest, file), tool, scope, files);
   } else {
     files.set(dest, src.endsWith('.md') ? Buffer.from(render(fs.readFileSync(src, 'utf8'), tool, scope)) : fs.readFileSync(src));
+  }
+}
+
+function ensureProjectDependency(base, silent) {
+  const projectFile = path.join(base, 'package.json');
+  const project = fs.existsSync(projectFile) ? JSON.parse(fs.readFileSync(projectFile, 'utf8')) : {};
+  if (!project || typeof project !== 'object' || Array.isArray(project)) throw new Error('Invalid project package.json.');
+  if (project.name === pkg.name) throw new Error('Cannot install Sheriff as a dependency of its own source repository. Use a separate project or --global.');
+  const declared = project.devDependencies?.[pkg.name] || project.dependencies?.[pkg.name];
+  if (declared && fs.existsSync(path.join(base, 'node_modules', pkg.name, 'package.json'))) return;
+  const manager = packageManager(base);
+  const command = process.platform === 'win32' && manager !== 'bun' ? `${manager}.cmd` : manager;
+  if (manager === 'yarn') {
+    const linker = spawnSync(command, ['config', 'get', 'nodeLinker'], { cwd: base, encoding: 'utf8', shell: process.platform === 'win32' });
+    if (linker.error || linker.status !== 0) throw new Error(`Could not check Yarn's nodeLinker: ${linker.error?.message || linker.stderr}`);
+    if (linker.stdout.trim() === 'pnp') throw new Error('Local Sheriff installs require node_modules. This Yarn project uses Plug’n’Play; use Sheriff --global or configure nodeLinker: node-modules before local setup.');
+  }
+  if (!silent) console.log(`${declared ? 'Restoring' : 'Installing'} ${pkg.name} project dependency with ${manager}…`);
+  const args = installArgs(manager, `${pkg.name}@${pkg.version}`, declared);
+  const result = spawnSync(command, args, {
+    cwd: base, stdio: silent ? 'pipe' : 'inherit', encoding: 'utf8', shell: process.platform === 'win32',
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error(`Could not install the Sheriff project dependency: ${result.error?.message || result.stderr?.trim() || `${manager} exited with ${result.status}`}. Fix the ${manager} error and rerun setup.`);
   }
 }
 
@@ -397,23 +411,14 @@ async function main() {
     if (options.silent || !process.stdin.isTTY || !process.stdout.isTTY) {
       throw new Error('Non-interactive setup requires --tool claude|codex|both and --local or --global.');
     }
-    printBanner(pkg.version);
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.on('SIGINT', () => rl.close());
-    try {
-      while (!selected) {
-        const answer = await ask(rl, 'AI tools: (1) Claude Code, (2) Codex, (3) Both [1/2/3, default: 1]: ');
-        const value = { '': 'claude', '1': 'claude', '2': 'codex', '3': 'both' }[answer] || answer;
-        try { selected = parseArgs(['--tool', value]).tools; }
-        catch { log('Choose claude, codex, or both.'); }
-      }
-      while (!scope) {
-        const answer = await ask(rl, `${options.uninstall ? 'Uninstall' : 'Install'} for (l) this project or (g) all your projects? [l/g, default: g]: `);
-        if (['l', 'local'].includes(answer)) scope = 'local';
-        else if (['', 'g', 'global'].includes(answer)) scope = 'global';
-        else log('Choose l or g.');
-      }
-    } finally { rl.close(); }
+    if (!selected) {
+      const tool = await select('AI tools', ['Claude Code', 'Codex', 'Both']);
+      selected = [['claude'], ['codex'], TOOLS][tool];
+    }
+    if (!scope) {
+      const choice = await select(options.uninstall ? 'Uninstall for' : 'Install for', ['This project (local)', 'All your projects (global)'], 1);
+      scope = ['local', 'global'][choice];
+    }
   }
   const base = scope === 'local' ? process.cwd() : os.homedir();
   const lock = path.join(base, '.sheriff-installer.lock');
@@ -425,6 +430,7 @@ async function main() {
   }
   try {
     fs.writeFileSync(descriptor, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }) + '\n');
+    if (scope === 'local' && !options.uninstall) ensureProjectDependency(base, options.silent);
     const dependency = scope === 'local' && !options.uninstall ? projectDependency(base, selected) : null;
     const targets = selected.map((tool) => preflight(tool, base, scope, options.uninstall, dependency));
     apply(targets);
