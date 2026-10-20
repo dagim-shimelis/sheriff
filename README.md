@@ -34,10 +34,10 @@
 *Saddle up. A small install. A better habit.*
 
 ```bash
-npx @dagim_codes/sheriff@latest --tool both --local
+npx @dagim_codes/sheriff@latest
 ```
 
-Run this from your project directory. It installs Sheriff as a development dependency when needed and registers both Claude Code and Codex; choose `--tool claude` or `--tool codex` for just one. User-wide installation is also available below and needs no project dependency. Open your AI tool in the project and start:
+Run this from your project directory. The wizard asks which tools to use (Claude Code, Codex, or both) and whether to install for this project or all your projects. Choose with ↑/↓ and Enter; press Ctrl+C to cancel. Project installation adds Sheriff as a development dependency when needed; user-wide installation needs no project dependency. Open your AI tool in the project and start:
 
 | Claude Code | Codex |
 | --- | --- |
@@ -45,9 +45,7 @@ Run this from your project directory. It installs Sheriff as a development depen
 
 Sheriff uses your existing AI session and test runner; no separate model API key is required. Restart your tool if the newly installed commands or skill aren't visible yet.
 
-Run `npx @dagim_codes/sheriff@latest` without flags to choose tools and scope using ↑/↓ and Enter. Press Ctrl+C to cancel.
-
-Explicit install commands:
+To skip the wizard, specify tools and scope explicitly:
 
 ```bash
 # Shared project: keep the runtime in node_modules and register small adapters.
@@ -182,11 +180,11 @@ Claude installation includes a statusline and context monitor while preserving a
 
 ## Update and uninstall
 
-For a project installation, update the dependency, then refresh its adapters using the same tool selection:
+For a project installation, update the dependency, then use the wizard to select the installed tools and project scope to refresh their adapters:
 
 ```bash
 npm install --save-dev @dagim_codes/sheriff@latest
-npx @dagim_codes/sheriff@latest --tool both --local
+npx @dagim_codes/sheriff@latest
 ```
 
 Use your project's package manager and lockfile for the dependency update. If Sheriff is already in `dependencies`, preserve that placement (with npm, use `--save-prod`). Both integrations share the same runtime, so refresh both when both are installed. Running only the setup command reuses the installed dependency.
