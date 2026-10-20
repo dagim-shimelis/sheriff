@@ -26,6 +26,10 @@ npm pack --dry-run
 
 Tests use temporary homes and projects. Local setup can invoke a package manager and modify the target project’s dependency declaration and lockfile; use disposable fixtures for installer checks. Package-manager selection and command tests are separate from live npm, pnpm, Yarn, and Bun compatibility checks. Do not test installation or uninstall against a real home directory or a project containing work you need to keep.
 
+Run `npm run test:package-managers` with npm, pnpm, Yarn, and Bun on `PATH` for real installation tests. Set `SHERIFF_TEST_MANAGER` to `npm`, `pnpm`, `yarn`, or `bun` to test just one installed manager. Missing executables fail the suite. Yarn Classic and modern Yarn must be run separately with the desired version on `PATH`.
+
+The suite serves the packed checkout from a temporary local registry, then verifies automatic dependency installation, installed CLI execution, Claude/Codex resources, hooks, and restoration after deleting `node_modules`. It covers standalone projects, workspace roots, and workspace children, and verifies modern Yarn Plug’n’Play rejection. CI runs pinned npm, pnpm, Yarn Classic, Yarn modern, and Bun versions on Linux, macOS, and Windows. These tests do not invoke AI hosts or the public Sheriff release.
+
 ## Branches and pull requests
 
 Use one short-lived branch and one PR per logical change, including documentation changes. Related implementation, regression tests, and documentation can share a PR with several commits.

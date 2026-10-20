@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { stripVTControlCharacters } = require('node:util');
 const { select } = require('./lib/select');
 const { packageManager, installArgs } = require('./lib/package-manager');
 const { spawnSync } = require('child_process');
@@ -123,22 +124,36 @@ function collect(src, dest, tool, scope, files) {
   }
 }
 
+function localDependencyRoot(base) {
+  let directory = base;
+  while (true) {
+    const root = path.join(directory, 'node_modules', pkg.name);
+    if (fs.existsSync(path.join(root, 'package.json'))) return root;
+    const parent = path.dirname(directory);
+    if (parent === directory || fs.existsSync(path.join(directory, '.git'))) return path.join(base, 'node_modules', pkg.name);
+    directory = parent;
+  }
+}
+
 function ensureProjectDependency(base, silent) {
   const projectFile = path.join(base, 'package.json');
   const project = fs.existsSync(projectFile) ? JSON.parse(fs.readFileSync(projectFile, 'utf8')) : {};
   if (!project || typeof project !== 'object' || Array.isArray(project)) throw new Error('Invalid project package.json.');
   if (project.name === pkg.name) throw new Error('Cannot install Sheriff as a dependency of its own source repository. Use a separate project or --global.');
   const declared = project.devDependencies?.[pkg.name] || project.dependencies?.[pkg.name];
-  if (declared && fs.existsSync(path.join(base, 'node_modules', pkg.name, 'package.json'))) return;
+  if (declared && fs.existsSync(path.join(localDependencyRoot(base), 'package.json'))) return;
   const manager = packageManager(base);
   const command = process.platform === 'win32' && manager !== 'bun' ? `${manager}.cmd` : manager;
+  const args = installArgs(manager, `${pkg.name}@${pkg.version}`, declared);
+  if (!declared && manager === 'pnpm' && fs.existsSync(path.join(base, 'pnpm-workspace.yaml'))) args.push('--workspace-root');
   if (manager === 'yarn') {
     const linker = spawnSync(command, ['config', 'get', 'nodeLinker'], { cwd: base, encoding: 'utf8', shell: process.platform === 'win32' });
     if (linker.error || linker.status !== 0) throw new Error(`Could not check Yarn's nodeLinker: ${linker.error?.message || linker.stderr}`);
-    if (linker.stdout.trim() === 'pnp') throw new Error('Local Sheriff installs require node_modules. This Yarn project uses Plug’n’Play; use Sheriff --global or configure nodeLinker: node-modules before local setup.');
+    const nodeLinker = stripVTControlCharacters(linker.stdout).trim();
+    if (nodeLinker === 'pnp') throw new Error('Local Sheriff installs require node_modules. This Yarn project uses Plug’n’Play; use Sheriff --global or configure nodeLinker: node-modules before local setup.');
+    if (!declared && project.workspaces && nodeLinker === 'undefined') args.push('--ignore-workspace-root-check');
   }
   if (!silent) console.log(`${declared ? 'Restoring' : 'Installing'} ${pkg.name} project dependency with ${manager}…`);
-  const args = installArgs(manager, `${pkg.name}@${pkg.version}`, declared);
   const result = spawnSync(command, args, {
     cwd: base, stdio: silent ? 'pipe' : 'inherit', encoding: 'utf8', shell: process.platform === 'win32',
   });
@@ -155,7 +170,7 @@ function projectDependency(base, tools) {
   if (!project || !(project.devDependencies?.[pkg.name] || project.dependencies?.[pkg.name])) {
     throw new Error(`Local installs require ${pkg.name} in package.json dependencies or devDependencies. ${instruction}`);
   }
-  const root = path.join(base, 'node_modules', pkg.name);
+  const root = localDependencyRoot(base);
   try {
     const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
     if (metadata.name !== pkg.name || typeof metadata.version !== 'string') throw new Error('invalid package metadata');

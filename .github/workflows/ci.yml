@@ -27,3 +27,30 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm pack --dry-run
+
+  package-managers:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        manager:
+          - { name: npm, package: npm@11.19.0 }
+          - { name: pnpm, package: pnpm@10.11.0 }
+          - { name: yarn, package: yarn@1.22.22 }
+          - { name: yarn, package: '@yarnpkg/cli-dist@4.9.2' }
+          - { name: bun, package: bun@1.2.14 }
+    name: Install ${{ matrix.manager.package }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: npm install --global --force ${{ matrix.manager.package }}
+      - run: npm run test:package-managers
+        env:
+          SHERIFF_TEST_MANAGER: ${{ matrix.manager.name }}
