@@ -39,6 +39,14 @@ for (const scope of ['local', 'global']) {
     const runtime = scope === 'local' ? path.join(f.packageRoot, 'dist/codex') : skill;
     ok(f.setup('--tool', 'codex', `--${scope}`, '--silent'));
     assert.ok(fs.existsSync(path.join(skill, 'SKILL.md')));
+    for (const action of ['run', 'audit', 'sync', 'status', 'configure', 'help']) {
+      const entry = path.join(base, `.agents/skills/sheriff-${action}/SKILL.md`);
+      assert.match(read(entry), new RegExp(`^name: sheriff-${action}$`, 'm'));
+      assert.ok(read(entry).includes(`\`$sheriff ${action}\``));
+      const reference = read(entry).match(/\[Sheriff instructions\]\(([^)]+)\)/)[1];
+      assert.equal(fs.realpathSync(path.resolve(path.dirname(entry), reference)), fs.realpathSync(path.join(skill, 'SKILL.md')));
+      fs.appendFileSync(entry, '\nold action version');
+    }
     if (scope === 'local') assert.deepEqual(fs.readdirSync(skill), ['SKILL.md']);
     assert.equal(fs.existsSync(path.join(base, '.claude')), false);
     for (const file of [...markdownFiles(skill), ...markdownFiles(runtime)]) {
@@ -67,14 +75,43 @@ for (const scope of ['local', 'global']) {
     fs.appendFileSync(updatedFile, '\nold version');
     ok(f.setup('--tool=codex', `--${scope}`, '--silent'));
     assert.doesNotMatch(read(updatedFile), /old version/);
+    assert.doesNotMatch(read(path.join(base, '.agents/skills/sheriff-run/SKILL.md')), /old action version/);
+    put(path.join(base, '.agents/skills/sheriff-audit/personal.md'), 'keep personal resource');
     assert.equal(ok(f.run(cli, ['read-handoff', 'executor-1'])), 'Resume with test assertions.');
     ok(f.setup('--tool', 'codex', `--${scope}`, '--uninstall', '--silent'));
     assert.equal(fs.existsSync(skill), false);
+    assert.equal(fs.existsSync(path.join(base, '.agents/skills/sheriff-run')), false);
+    assert.equal(fs.existsSync(path.join(base, '.agents/skills/sheriff-audit/SKILL.md')), false);
+    assert.equal(read(path.join(base, '.agents/skills/sheriff-audit/personal.md')), 'keep personal resource');
     assert.equal(read(path.join(f.project, 'tests/example.test.js')), 'keep tests');
     assert.equal(json(path.join(f.project, '.sheriff/.sheriff.json')).language, 'ts');
     ok(f.setup('--tool', 'codex', `--${scope}`, '--uninstall', '--silent'));
   });
+
+  test(`Codex ${scope}: action collisions abort both integrations before writes`, (t) => {
+    const f = fixture(t);
+    const base = scope === 'local' ? f.project : f.home;
+    const entry = path.join(base, '.agents/skills/sheriff-run/SKILL.md');
+    put(entry, 'personal skill');
+    const result = f.setup('--tool', 'both', `--${scope}`, '--silent');
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /unowned/);
+    assert.equal(read(entry), 'personal skill');
+    assert.equal(fs.existsSync(path.join(base, '.claude')), false);
+    assert.equal(fs.existsSync(path.join(base, '.agents/skills/sheriff')), false);
+  });
 }
+
+test('Codex local: single-entry installs gain actions and uninstall without the dependency', (t) => {
+  const f = fixture(t);
+  const skill = path.join(f.project, '.agents/skills/sheriff/SKILL.md');
+  put(skill, '---\nname: sheriff\n---\n<!-- sheriff-managed: package -->\nold adapter\n');
+  ok(f.setup('--tool', 'codex', '--local', '--silent'));
+  assert.ok(fs.existsSync(path.join(f.project, '.agents/skills/sheriff-run/SKILL.md')));
+  fs.rmSync(f.packageRoot, { recursive: true, force: true });
+  ok(f.setup('--tool', 'codex', '--local', '--uninstall', '--silent'));
+  assert.deepEqual(fs.readdirSync(path.join(f.project, '.agents/skills')), []);
+});
 
 test('both integrations share state, preserve unrelated Claude settings, and uninstall independently', (t) => {
   const f = fixture(t);

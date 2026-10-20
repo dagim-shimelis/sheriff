@@ -59,7 +59,9 @@ npx @dagim_codes/sheriff@latest --tool both --global
 
 Use `--tool claude` or `--tool codex` for one integration; `--tool claude,codex` also selects both. Existing commands with `--local` or `--global` but no `--tool` target Claude Code. Non-interactive use requires a scope; add `--silent` to suppress normal output. The project installer requires a declared, installed dependency and explains how to install it if missing; it does not run your package manager automatically.
 
-Project installs keep the runtime, workflows, templates, and role instructions inside `node_modules/@dagim_codes/sheriff/`. Codex adds only `.agents/skills/sheriff/SKILL.md`. Claude keeps small native command, agent, and hook adapters plus its settings and ownership inventory. Commit the adapters, `package.json`, and your lockfile for a shared installation; teammates restore the runtime with their usual dependency install. Keep `node_modules/` ignored, and install development dependencies when using Sheriff.
+Project installs keep the runtime, workflows, templates, and role instructions inside `node_modules/@dagim_codes/sheriff/`. Codex adds `.agents/skills/sheriff/SKILL.md` and six small action skills alongside it (`sheriff-run`, `sheriff-audit`, `sheriff-sync`, `sheriff-status`, `sheriff-configure`, and `sheriff-help`). Claude keeps small native command, agent, and hook adapters plus its settings and ownership inventory. Commit the adapters, `package.json`, and your lockfile for a shared installation; teammates restore the runtime with their usual dependency install. Keep `node_modules/` ignored, and install development dependencies when using Sheriff.
+
+After installing for Codex, restart Codex in the project and type `$sheriff` in its chat prompt. Sheriff displays Run, Audit, Sync, and Status; reply with a number or action name. You can invoke an action directly with `$sheriff-run`, `$sheriff-audit`, `$sheriff-sync`, `$sheriff-status`, `$sheriff-configure`, or `$sheriff-help`. Existing forms such as `$sheriff audit` still work. The menu appears after you submit the prompt; it is not terminal autocomplete.
 
 Requirements: Node.js 18+, a supported AI tool with file/shell access, and a JavaScript or TypeScript project. Sheriff reuses existing runners and can help configure a missing runner within your authorized scope. Browser/service-dependent tests require their own working environment.
 
@@ -102,16 +104,16 @@ Sheriff supplies instructions and a local state CLI. Your AI tool performs the c
 
 | Operation | Claude Code | Codex |
 | --- | --- | --- |
-| Run or resume | `/sheriff:run` | `$sheriff run` |
-| Audit before testing | `/sheriff:run --audit` | `$sheriff run --audit` |
-| Test without auditing | `/sheriff:run --no-audit` | `$sheriff run --no-audit` |
-| Sync worktree changes | `/sheriff:sync` | `$sheriff sync` |
-| Audit source | `/sheriff:audit` | `$sheriff audit` |
-| Progress | `/sheriff:status` | `$sheriff status` |
-| Configuration | `/sheriff:configure` | `$sheriff configure` |
-| Help | `/sheriff:help` | `$sheriff help` |
+| Run or resume | `/sheriff:run` | `$sheriff-run` |
+| Audit before testing | `/sheriff:run --audit` | `$sheriff-run --audit` |
+| Test without auditing | `/sheriff:run --no-audit` | `$sheriff-run --no-audit` |
+| Sync worktree changes | `/sheriff:sync` | `$sheriff-sync` |
+| Audit source | `/sheriff:audit` | `$sheriff-audit` |
+| Progress | `/sheriff:status` | `$sheriff-status` |
+| Configuration | `/sheriff:configure` | `$sheriff-configure` |
+| Help | `/sheriff:help` | `$sheriff-help` |
 
-Restart the host if newly installed commands or skills are not yet visible. Codex uses a self-contained [Agent Skill](https://learn.chatgpt.com/docs/build-skills); Claude Code uses commands and role instructions. Host permissions and repository instructions apply in both tools.
+Restart the host if newly installed commands or skills are not yet visible. Codex uses [Agent Skills](https://learn.chatgpt.com/docs/build-skills); Claude Code uses commands and role instructions. Host permissions and repository instructions apply in both tools.
 
 Run discovers sources/tests, builds a phase plan, executes dependency-ordered work, and reports evidence. Pending handoffs resume before new eligible work. Review/fail items remain visible and are not retried indefinitely. `run --phase N` explicitly retries review/fail items in one existing phase while preserving passing work. `run --from-scratch` archives the old plan and evidence, keeps configuration/tests, and regenerates discovery.
 
@@ -200,7 +202,7 @@ Choose `--tool both` for both integrations. Installed `update` commands retain t
 | Shared runtime and instructions | `node_modules/@dagim_codes/sheriff/dist/{claude,codex}/` | Bundled under each integration |
 | Claude commands/agents | Small adapters in `.claude/commands/sheriff/` and `.claude/agents/` | Full instructions under the same home paths |
 | Claude settings/hooks/inventory | `.claude/settings.json`, small `.claude/hooks/` adapters, `.claude/sheriff/.install-manifest.json` | Full hooks and `.claude/sheriff/` runtime under home |
-| Codex skill | `.agents/skills/sheriff/SKILL.md` entry point | Self-contained `~/.agents/skills/sheriff/` |
+| Codex skill | `.agents/skills/sheriff*/SKILL.md` entry points | Shared runtime in `~/.agents/skills/sheriff/` with sibling action skills |
 
 Codex installation does not modify AGENTS.md or Codex configuration. Local runtime references are relative; rerun Claude registration after moving or cloning a project to refresh its statusline path. Missing development dependencies must be restored before running Sheriff. Other AI tools are not yet supported integrations.
 

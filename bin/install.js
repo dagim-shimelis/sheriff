@@ -11,6 +11,15 @@ const ROOT = path.resolve(__dirname, '..');
 const TOOLS = ['claude', 'codex'];
 const HOOK_FILES = ['sheriff-context-monitor.js', 'sheriff-statusline.js'];
 const SKILL_MARKER = '<!-- sheriff-managed: package -->';
+const ACTION_MARKER = '<!-- sheriff-managed: action-skill -->';
+const CODEX_ACTIONS = {
+  run: 'Generate and run tests, or resume Sheriff coverage work.',
+  audit: 'Inspect source code for issues with Sheriff.',
+  sync: 'Update tests after code changes with Sheriff.',
+  status: 'Show Sheriff progress and current test coverage work.',
+  configure: 'Configure Sheriff for this project.',
+  help: 'Explain Sheriff actions and usage.',
+};
 const agentFiles = fs.readdirSync(path.join(ROOT, 'agents')).filter((f) => f.startsWith('sheriff-'));
 
 function parseArgs(args) {
@@ -171,6 +180,13 @@ function preflight(tool, base, scope, uninstall, dependency) {
   const manifestFile = path.join(root, '.install-manifest.json');
   const packageFile = path.join(root, 'package.json');
   const skillFile = path.join(root, 'SKILL.md');
+  const actionFiles = tool === 'codex' ? Object.keys(CODEX_ACTIONS).map((action) =>
+    path.join(path.dirname(root), `sheriff-${action}`, 'SKILL.md')) : [];
+  const ownedActions = new Set();
+  for (const file of actionFiles) {
+    assertFile(file, base);
+    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8').split(/\r?\n/).includes(ACTION_MARKER)) ownedActions.add(file);
+  }
   assertFile(packageFile, base);
   assertFile(manifestFile, base);
   assertFile(skillFile, base);
@@ -223,6 +239,13 @@ function preflight(tool, base, scope, uninstall, dependency) {
     }
   }
 
+  if (tool === 'codex' && !uninstall) {
+    for (const [index, [action, description]] of Object.entries(CODEX_ACTIONS).entries()) {
+      const file = actionFiles[index];
+      files.set(file, Buffer.from(`---\nname: sheriff-${action}\ndescription: ${description}\n---\n\n${ACTION_MARKER}\n\nRead and follow [Sheriff instructions](../sheriff/SKILL.md) as \`$sheriff ${action}\`, preserving the user's arguments and flags. Resolve resources relative to the referenced instruction file and execute commands in the user's project root.\n`));
+    }
+  }
+
   let owned = new Set();
   if (manifest) {
     if (!Array.isArray(manifest.files)) throw new Error(`Invalid installation manifest: ${manifestFile}`);
@@ -233,7 +256,7 @@ function preflight(tool, base, scope, uninstall, dependency) {
       const file = path.resolve(base, relative);
       const withinRoot = file.startsWith(root + path.sep);
       const commandRoot = path.join(dir, 'commands', 'sheriff') + path.sep;
-      const external = tool === 'claude' && (file.startsWith(commandRoot) ||
+      const external = (tool === 'codex' && actionFiles.includes(file)) || tool === 'claude' && (file.startsWith(commandRoot) ||
         (path.dirname(file) === path.join(dir, 'agents') && /^sheriff-[\w-]+\.md$/.test(path.basename(file))) ||
         HOOK_FILES.some((name) => file === path.join(dir, 'hooks', name)));
       if (!withinRoot && !external) throw new Error(`Manifest path is outside Sheriff: ${relative}`);
@@ -256,6 +279,7 @@ function preflight(tool, base, scope, uninstall, dependency) {
         (path.dirname(file) === path.join(dir, 'agents') && fs.existsSync(oldAgent) && previous.equals(fs.readFileSync(oldAgent)));
     }).map(([file]) => file));
   }
+  for (const file of ownedActions) owned.add(file);
   if (markedSkill) owned.add(skillFile);
   const changes = new Map();
   for (const file of new Set([...files.keys(), ...owned])) {
@@ -300,7 +324,7 @@ function preflight(tool, base, scope, uninstall, dependency) {
   if (!uninstall && (scope === 'global' || tool === 'claude')) {
     changes.set(manifestFile, Buffer.from(JSON.stringify(inventory, null, 2) + '\n'));
   }
-  return { tool, root, base, changes };
+  return { tool, root, base, changes, cleanupRoots: [root, ...actionFiles.map((file) => path.dirname(file))] };
 }
 
 function writeAtomic(file, content, mode) {
@@ -345,10 +369,10 @@ function apply(targets) {
     throw error;
   }
   // Remove only empty directories; personal files are never recursively deleted.
-  for (const { root, changes } of targets) {
+  for (const { cleanupRoots, changes } of targets) {
     const dirs = new Set();
     for (const file of changes.keys()) {
-      for (let dir = path.dirname(file); dir === root || dir.startsWith(root + path.sep); dir = path.dirname(dir)) dirs.add(dir);
+      for (let dir = path.dirname(file); cleanupRoots.some((root) => dir === root || dir.startsWith(root + path.sep)); dir = path.dirname(dir)) dirs.add(dir);
     }
     for (const dir of [...dirs].sort((a, b) => b.length - a.length)) { try { fs.rmdirSync(dir); } catch {} }
   }
@@ -406,7 +430,7 @@ async function main() {
     apply(targets);
     for (const { tool, root } of targets) {
       if (options.uninstall) log(`Uninstalled ${tool}. Project state, tests, and unowned files were preserved.`);
-      else log(`Installed ${tool} → ${root}${dependency ? ` (project dependency ${dependency.version})` : ''}\nRun ${tool === 'codex' ? '$sheriff help in Codex (restart to discover the skill).' : '/sheriff:help in Claude Code.'}`);
+      else log(`Installed ${tool} → ${root}${dependency ? ` (project dependency ${dependency.version})` : ''}\n${tool === 'codex' ? 'Restart Codex in your project, then type $sheriff-run in its chat prompt, or $sheriff to choose an action.' : 'Run /sheriff:help in Claude Code.'}`);
     }
   } finally {
     fs.closeSync(descriptor);
