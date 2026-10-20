@@ -80,6 +80,7 @@ for (const manager of managers) {
         npm_config_audit: 'false', npm_config_fund: 'false',
         BUN_INSTALL_CACHE_DIR: path.join(dir, 'bun-cache'),
         YARN_CACHE_FOLDER: path.join(dir, 'yarn-cache'),
+        YARN_GLOBAL_FOLDER: path.join(dir, 'yarn-global'),
         COREPACK_ENABLE_PROJECT_SPEC: '0', COREPACK_ENABLE_AUTO_PIN: '0',
         YARN_ENABLE_IMMUTABLE_INSTALLS: 'false',
         // Yarn Classic emits ANSI controls even when its config output is piped.
@@ -93,7 +94,8 @@ for (const manager of managers) {
         name: 'fixture-root', version: '1.0.0', private: true, packageManager: `${manager}@${version}`,
         ...(workspace ? { workspaces: ['packages/*'] } : {}),
       });
-      fs.writeFileSync(path.join(root, '.npmrc'), `registry=${registry}\n`);
+      fs.writeFileSync(path.join(root, '.npmrc'), `registry=${registry}\n` +
+        (manager === 'pnpm' ? `store-dir=${path.join(dir, 'pnpm-store').split(path.sep).join('/')}\n` : ''));
       fs.writeFileSync(path.join(root, 'bunfig.toml'), `[install]\nregistry = "${registry}"\n`);
       if (modernYarn) fs.writeFileSync(path.join(root, '.yarnrc.yml'),
         `nodeLinker: node-modules\nnpmRegistryServer: "${registry}"\nunsafeHttpWhitelist:\n  - 127.0.0.1\nenableGlobalCache: false\n`);
