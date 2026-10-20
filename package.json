@@ -46,7 +46,7 @@
     "type": "git",
     "url": "git+https://github.com/dagim-shimelis/sheriff.git"
   },
-  "homepage": "https://github.com/dagim-shimelis/sheriff#readme",
+  "homepage": "https://sheriff.dagim.codes/",
   "bugs": {
     "url": "https://github.com/dagim-shimelis/sheriff/issues"
   },
