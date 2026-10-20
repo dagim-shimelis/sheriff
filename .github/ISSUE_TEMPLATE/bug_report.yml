@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible problem with Sheriff.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. For vulnerabilities, use [private reporting](https://github.com/dagim-shimelis/sheriff/security/advisories/new).
+        Remove credentials, private code, and personal data from logs and examples.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the Sheriff version, OS, Node.js version, host tool and version, and local or global installation scope.
+      placeholder: "Sheriff: ...; OS: ...; Node.js: ...; Claude Code or Codex: ...; scope: ..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide exact commands and a minimal reproduction using a disposable project.
+      placeholder: |
+        1. Install with ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include relevant error messages and sanitized logs.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Include a workaround or related issue if available.
