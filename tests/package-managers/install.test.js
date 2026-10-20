@@ -138,7 +138,9 @@ for (const manager of managers) {
       fs.rmSync(path.join(root, 'node_modules'), { recursive: true, force: true });
       if (project !== root) fs.rmSync(path.join(project, 'node_modules'), { recursive: true, force: true });
       assert.equal(fs.existsSync(cli), false);
-      ok(await setup());
+      const restored = await setup();
+      if (restored.status !== 0) t.diagnostic(`Lockfile before restoration:\n${before[0]}`);
+      ok(restored);
       assert.deepEqual(tracked.map(read), before);
       assert.equal(ok(await run(process.execPath, [cli, 'read-handoff', 'restore'], project, env)), 'Keep this work.');
       const hook = path.join(project, '.claude/hooks/sheriff-statusline.js');
