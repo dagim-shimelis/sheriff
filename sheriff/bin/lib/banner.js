@@ -35,4 +35,4 @@ function printCompact() {
   console.log(`${GOLD}${BOLD}  SHERIFF${RESET} ${GRAY}— automated test coverage${RESET}`);
 }
 
-module.exports = { printBanner, printCompact, GOLD, GREEN, DIM, WHITE, GRAY, RESET, BOLD };
+module.exports = { printBanner, printCompact, LOGO, GOLD, GREEN, DIM, WHITE, GRAY, RESET, BOLD };

@@ -22,7 +22,9 @@ npm test
 npm pack --dry-run
 ```
 
-`npm test` and `npm pack` rebuild the standalone hooks automatically. Tests use temporary homes and projects. Do not test installation or uninstall against a real home directory or a project containing work you need to keep.
+`npm test` and `npm pack` rebuild the standalone hooks and per-tool runtime bundles automatically. Edit shared instructions in `commands/sheriff/`, `workflows/`, `agents/`, and `sheriff/`; the build copies them into `dist/claude/` and `dist/codex/`. Do not edit generated bundles directly.
+
+Tests use temporary homes and projects. Local setup can invoke a package manager and modify the target project’s dependency declaration and lockfile; use disposable fixtures for installer checks. Package-manager selection and command tests are separate from live npm, pnpm, Yarn, and Bun compatibility checks. Do not test installation or uninstall against a real home directory or a project containing work you need to keep.
 
 ## Branches and pull requests
 

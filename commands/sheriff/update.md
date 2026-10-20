@@ -11,7 +11,7 @@ Use its runtime paths, tool integration, and install scope.
 
 Run `check-update --raw` and parse its JSON, including exit 1 for an available update. If the registry check reports an error, say the latest version could not be verified; do not report "already up to date". If no newer version is available, report the current version and stop.
 
-When an update is available, use the tool and scope recorded in runtime.md. For a **local** installation, run these steps from the project directory containing its package.json, checking each exit status before continuing:
+When an update is available, use the tool and scope recorded in runtime.md. Rerunning the installer alone reuses an existing local dependency; update the dependency explicitly first. For a **local** installation, run these steps from the project directory containing its package.json, checking each exit status before continuing:
 
 ```bash
 npm install --save-dev @dagim_codes/sheriff@latest

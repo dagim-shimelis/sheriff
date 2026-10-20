@@ -34,11 +34,10 @@
 *Saddle up. A small install. A better habit.*
 
 ```bash
-npm install --save-dev @dagim_codes/sheriff@latest
-npx sheriff --tool both --local
+npx @dagim_codes/sheriff@latest --tool both --local
 ```
 
-This registers both Claude Code and Codex for the project; choose `--tool claude` or `--tool codex` for just one. User-wide installation is also available below and needs no project dependency. Open your AI tool in the project and start:
+Run this from your project directory. It installs Sheriff as a development dependency when needed and registers both Claude Code and Codex; choose `--tool claude` or `--tool codex` for just one. User-wide installation is also available below and needs no project dependency. Open your AI tool in the project and start:
 
 | Claude Code | Codex |
 | --- | --- |
@@ -46,18 +45,28 @@ This registers both Claude Code and Codex for the project; choose `--tool claude
 
 Sheriff uses your existing AI session and test runner; no separate model API key is required. Restart your tool if the newly installed commands or skill aren't visible yet.
 
+Run `npx @dagim_codes/sheriff@latest` without flags to choose tools and scope using ↑/↓ and Enter. Press Ctrl+C to cancel.
+
 Explicit install commands:
 
 ```bash
 # Shared project: keep the runtime in node_modules and register small adapters.
-npm install --save-dev @dagim_codes/sheriff@latest
-npx sheriff --tool both --local
+npx @dagim_codes/sheriff@latest --tool both --local
 
 # Personal installation across projects: keep the runtime in your home directory.
 npx @dagim_codes/sheriff@latest --tool both --global
 ```
 
-Use `--tool claude` or `--tool codex` for one integration; `--tool claude,codex` also selects both. Existing commands with `--local` or `--global` but no `--tool` target Claude Code. Non-interactive use requires a scope; add `--silent` to suppress normal output. The project installer requires a declared, installed dependency and explains how to install it if missing; it does not run your package manager automatically.
+Use `--tool claude` or `--tool codex` for one integration; `--tool claude,codex` also selects both. Existing commands with `--local` or `--global` but no `--tool` target Claude Code. Non-interactive use requires a scope; add `--silent` to suppress normal output.
+
+Local setup uses the project's npm, pnpm, Yarn, or Bun package manager:
+
+- A new dependency uses the version of the installer you run. Setup adds it to `devDependencies` and lets the package manager update `package.json` and its lockfile.
+- An existing declared and installed dependency is validated and reused. If it is missing from `node_modules`, setup restores the project's dependencies. Rerunning setup does **not** upgrade an existing installation; follow [Update and uninstall](#update-and-uninstall).
+- Detection checks the current directory, then parent directories up to the repository boundary. At each directory, `packageManager` takes priority over lockfiles; without a match, npm is used. Conflicting package-manager files require an explicit `packageManager` field.
+- Yarn Plug’n’Play is not supported for local installs; use a `node_modules` linker or global installation. The selected package manager must be available on your PATH.
+
+Dependency installation or validation failures stop setup before integration adapters are written. Package-manager changes are separate from the installer's adapter rollback.
 
 Project installs keep the runtime, workflows, templates, and role instructions inside `node_modules/@dagim_codes/sheriff/`. Codex adds `.agents/skills/sheriff/SKILL.md` and six small action skills alongside it (`sheriff-run`, `sheriff-audit`, `sheriff-sync`, `sheriff-status`, `sheriff-configure`, and `sheriff-help`). Claude keeps small native command, agent, and hook adapters plus its settings and ownership inventory. Commit the adapters, `package.json`, and your lockfile for a shared installation; teammates restore the runtime with their usual dependency install. Keep `node_modules/` ignored, and install development dependencies when using Sheriff.
 
@@ -177,13 +186,15 @@ For a project installation, update the dependency, then refresh its adapters usi
 
 ```bash
 npm install --save-dev @dagim_codes/sheriff@latest
-npx sheriff --tool codex --local
+npx @dagim_codes/sheriff@latest --tool both --local
 ```
 
-To remove the project integration:
+Use your project's package manager and lockfile for the dependency update. If Sheriff is already in `dependencies`, preserve that placement (with npm, use `--save-prod`). Both integrations share the same runtime, so refresh both when both are installed. Running only the setup command reuses the installed dependency.
+
+To remove the project integrations:
 
 ```bash
-npx sheriff --tool codex --local --uninstall
+npx @dagim_codes/sheriff@latest --tool both --local --uninstall
 # After removing every integration that uses the dependency:
 npm uninstall --save-dev @dagim_codes/sheriff
 ```
@@ -195,7 +206,7 @@ npx @dagim_codes/sheriff@latest --tool both --global
 npx @dagim_codes/sheriff@latest --tool both --global --uninstall
 ```
 
-Choose `--tool both` for both integrations. Installed `update` commands retain their tool and scope. Updating an older project installation migrates its owned copied files to the small adapters while preserving unknown files, project `.sheriff/`, and tests. The installer tracks its files, preserves unknown settings, and refuses unrelated destination collisions. Integration removal leaves the package declaration unchanged; if `node_modules` is already missing, use `npx @dagim_codes/sheriff@latest --tool codex --local --uninstall`. Normal I/O failures roll back installation writes; abrupt process or machine termination is not a transactional filesystem guarantee.
+Choose `--tool both` for both integrations. Installed `update` commands retain their tool and scope. Updating an older project installation migrates its owned copied files to the small adapters while preserving unknown files, project `.sheriff/`, and tests. The installer tracks its files, preserves unknown settings, and refuses unrelated destination collisions. Integration removal leaves the package declaration unchanged and works even when `node_modules` is missing. Use your package manager to remove the dependency after all local integrations have been removed. Normal I/O failures roll back installation writes; abrupt process or machine termination is not a transactional filesystem guarantee.
 
 | Integration | Project scope | User scope |
 | --- | --- | --- |
@@ -228,7 +239,7 @@ npm run benchmark
 npm pack --dry-run
 ```
 
-Hook builds use Node's syntax check and copy the standalone scripts. `pretest` and `prepack` rebuild hooks and the per-tool instruction/runtime bundles; `prepublishOnly` runs tests. Tests use temporary homes/projects for installation, runtime state, recovery, migration, and an offline npm tarball installation.
+Hook builds use Node's syntax check and copy the standalone scripts. `pretest` and `prepack` rebuild hooks and the per-tool instruction/runtime bundles; `prepublishOnly` runs tests. Tests use temporary homes/projects for installation, runtime state, recovery, migration, an offline npm tarball installation, package-manager detection and command selection, automatic dependency setup, and keyboard navigation/cancellation. Package-manager unit checks do not establish end-to-end compatibility with every manager or workspace layout.
 
 `npm run --silent benchmark -- --json` emits machine-readable samples and provenance. `npm run --silent benchmark:report -- <current.json> [baseline.json]` renders a Markdown summary, suppressing percentage comparisons for incompatible runs. Both commands run locally without model or network calls.
 

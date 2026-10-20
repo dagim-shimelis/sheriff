@@ -1,6 +1,6 @@
 {
   "name": "@dagim_codes/sheriff",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Test coverage workflows for Claude Code and Codex: discover, audit, generate, and sync tests.",
   "keywords": [
     "testing",
