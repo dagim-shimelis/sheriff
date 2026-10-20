@@ -36,7 +36,8 @@ function write(file, value) { fs.writeFileSync(file, JSON.stringify(value, null,
 function read(file) { return fs.readFileSync(file, 'utf8'); }
 
 before(async () => {
-  directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sheriff-real-managers-'));
+  // pnpm must not mix Windows short temp paths (RUNNER~1) with expanded workspace paths.
+  directory = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'sheriff-real-managers-')));
   const packed = JSON.parse(ok(await run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', directory], ROOT, process.env)))[0];
   const tarball = fs.readFileSync(path.join(directory, packed.filename));
   server = http.createServer((request, response) => {
