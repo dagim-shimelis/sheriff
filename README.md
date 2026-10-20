@@ -7,7 +7,8 @@
 <h2 align="center">Big ideas. <em>Fewer blind spots.</em></h2>
 
 <p align="center">
-  Sheriff finds test gaps, writes and runs tests, and keeps them aligned with your changes—in Claude Code or Codex.
+  Sheriff is a testing orchestration layer for Claude Code and Codex.
+  It finds test gaps, writes and runs tests, and keeps them aligned with your changes.
   <br>
   <em>A deputy for your codebase.</em>
 </p>
