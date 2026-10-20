@@ -107,7 +107,7 @@ for (const manager of managers) {
         fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), "packages:\n  - 'packages/*'\n");
         if (layout === 'workspace-child') project = child;
       }
-      const setup = () => run(process.execPath, [path.join(ROOT, 'bin/install.js'), '--tool', 'both', '--local', '--silent'], project, env);
+      const setup = () => run(process.execPath, [path.join(ROOT, 'bin/install.js'), '--tool', 'both', '--local'], project, env);
       const requestsBefore = tarballRequests;
       ok(await setup());
       assert.ok(tarballRequests > requestsBefore, 'real manager must download the packed checkout');
