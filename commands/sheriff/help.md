@@ -29,7 +29,9 @@ Read `current-version --raw` and show a concise guide using this host's invocati
 
 Explain that `.sheriff/` is shared project state, test files live in the project's normal test locations, Codex executes roles sequentially, and Claude delegation depends on host permissions. Commits and source fixes respect user authorization/configuration. Failing regressions remain visible; skipped or unexecuted tests do not count as a successful run. Test inventory is not measured line/branch coverage.
 
-Installation: `npx @dagim_codes/sheriff --tool {INSTALL_TOOL} --{INSTALL_SCOPE}`.
-Uninstall this integration: `npx @dagim_codes/sheriff --tool {INSTALL_TOOL} --{INSTALL_SCOPE} --uninstall`.
+Local installation: run `npm install --save-dev @dagim_codes/sheriff@latest`, then `node node_modules/@dagim_codes/sheriff/bin/install.js --tool {INSTALL_TOOL} --local`. The runtime stays in node_modules. For shared projects, include the dependency, lockfile, and integration files in an authorized commit so collaborators can restore the runtime with the package manager. Existing `dependencies` entries can stay there; use the project's package manager and lockfile.
+Global installation: `npx @dagim_codes/sheriff@latest --tool {INSTALL_TOOL} --global`.
+Uninstall this integration: `npx @dagim_codes/sheriff@latest --tool {INSTALL_TOOL} --{INSTALL_SCOPE} --uninstall`.
+Uninstall preserves the shared project dependency and `.sheriff/` state. After removing every local Sheriff integration, remove the dependency separately if it is no longer needed.
 
 Do not promise autonomous perfect coverage, universal framework support, or recovery of unsaved work.

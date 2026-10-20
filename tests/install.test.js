@@ -5,18 +5,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
+const { installPackage } = require('./fixtures/install-package');
 const ROOT = path.resolve(__dirname, '..');
 const installer = path.join(ROOT, 'bin/install.js');
 
-function fixture(t) {
+function fixture(t, dependency = true) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sheriff-test-'));
   const home = path.join(dir, 'home');
   const project = path.join(dir, "project with 'quotes' and spaces");
   fs.mkdirSync(home); fs.mkdirSync(project);
+  const packageRoot = dependency ? installPackage(project) : path.join(project, 'node_modules/@dagim_codes/sheriff');
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const env = { ...process.env, HOME: home, USERPROFILE: home, NODE_PATH: '', HOOK_DATA: '', TMPDIR: dir, TMP: dir, TEMP: dir };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: project, NODE_PATH: '', HOOK_DATA: '', TMPDIR: dir, TMP: dir, TEMP: dir };
   const run = (file, args = [], input = '') => spawnSync(process.execPath, [file, ...args], { cwd: project, env, input, encoding: 'utf8', timeout: 10000 });
-  return { dir, home, project, env, run, setup: (...args) => run(installer, args) };
+  return { dir, home, project, packageRoot, env, run, setup: (...args) => run(installer, args) };
 }
 function ok(result) { assert.equal(result.status, 0, result.stderr || result.stdout); return result.stdout; }
 function put(file, content) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, content); }
@@ -30,14 +32,16 @@ function markdownFiles(dir) {
 }
 
 for (const scope of ['local', 'global']) {
-  test(`Codex ${scope}: self-contained install, relative references, update and uninstall`, (t) => {
+  test(`Codex ${scope}: relative references, runtime, reinstall and uninstall`, (t) => {
     const f = fixture(t);
     const base = scope === 'local' ? f.project : f.home;
     const skill = path.join(base, '.agents/skills/sheriff');
+    const runtime = scope === 'local' ? path.join(f.packageRoot, 'dist/codex') : skill;
     ok(f.setup('--tool', 'codex', `--${scope}`, '--silent'));
     assert.ok(fs.existsSync(path.join(skill, 'SKILL.md')));
+    if (scope === 'local') assert.deepEqual(fs.readdirSync(skill), ['SKILL.md']);
     assert.equal(fs.existsSync(path.join(base, '.claude')), false);
-    for (const file of markdownFiles(skill)) {
+    for (const file of [...markdownFiles(skill), ...markdownFiles(runtime)]) {
       const content = read(file);
       assert.doesNotMatch(content, /~?\/?.claude\/sheriff|@~\/|Task\(|\{INSTALL_(TOOL|SCOPE)\}|\{SHERIFF_RUNTIME\}/);
       assert.equal(content.includes(f.dir), false, 'installed content must survive moving the project');
@@ -45,13 +49,13 @@ for (const scope of ['local', 'global']) {
     for (const match of read(path.join(skill, 'SKILL.md')).matchAll(/\]\(([^)]+)\)/g)) {
       assert.ok(fs.existsSync(path.join(skill, match[1])), `Missing skill resource ${match[1]}`);
     }
-    for (const file of fs.readdirSync(path.join(skill, 'commands'))) {
-      const content = read(path.join(skill, 'commands', file));
+    for (const file of fs.readdirSync(path.join(runtime, 'commands'))) {
+      const content = read(path.join(runtime, 'commands', file));
       const relative = content.match(/Read `([^`]+runtime.md)` relative/)[1];
-      assert.equal(fs.realpathSync(path.join(skill, 'commands', relative)), fs.realpathSync(path.join(skill, 'runtime.md')));
+      assert.equal(fs.realpathSync(path.join(runtime, 'commands', relative)), fs.realpathSync(path.join(runtime, 'runtime.md')));
     }
-    assert.match(read(path.join(skill, 'commands/update.md')), new RegExp(`--tool codex --${scope} --silent`));
-    const cli = path.join(skill, 'bin/sheriff-tools.js');
+    assert.match(read(path.join(runtime, 'commands/update.md')), new RegExp(`--tool codex --${scope} --silent`));
+    const cli = path.join(runtime, 'bin/sheriff-tools.js');
     assert.equal(JSON.parse(ok(f.run(cli, ['current-version', '--raw']))).version, require('../package.json').version);
     ok(f.run(cli, ['init-project']));
     ok(f.run(cli, ['write-config'], JSON.stringify({ language: 'ts', models: { light: 'inherit', medium: 'inherit', heavy: 'inherit' } })));
@@ -59,9 +63,10 @@ for (const scope of ['local', 'global']) {
     ok(f.run(cli, ['write-handoff', 'executor-1'], 'Resume with test assertions.'));
     assert.equal(ok(f.run(cli, ['read-handoff', 'executor-1'])), 'Resume with test assertions.');
     put(path.join(f.project, 'tests/example.test.js'), 'keep tests');
-    put(path.join(skill, 'commands/help.md'), 'old version');
+    const updatedFile = path.join(skill, scope === 'local' ? 'SKILL.md' : 'commands/help.md');
+    fs.appendFileSync(updatedFile, '\nold version');
     ok(f.setup('--tool=codex', `--${scope}`, '--silent'));
-    assert.notEqual(read(path.join(skill, 'commands/help.md')), 'old version');
+    assert.doesNotMatch(read(updatedFile), /old version/);
     assert.equal(ok(f.run(cli, ['read-handoff', 'executor-1'])), 'Resume with test assertions.');
     ok(f.setup('--tool', 'codex', `--${scope}`, '--uninstall', '--silent'));
     assert.equal(fs.existsSync(skill), false);
@@ -86,12 +91,14 @@ test('both integrations share state, preserve unrelated Claude settings, and uni
   assert.equal(settings.hooks.PostToolUse.length, 2);
   assert.deepEqual(settings.hooks.PostToolUse[0], original.hooks.PostToolUse[0]);
   assert.equal(settings.hooks.PostToolUse[1].hooks[0].type, 'command');
-  const claudeCli = path.join(f.project, '.claude/sheriff/bin/sheriff-tools.js');
-  const codexCli = path.join(f.project, '.agents/skills/sheriff/bin/sheriff-tools.js');
+  const claudeCli = path.join(f.packageRoot, 'dist/claude/bin/sheriff-tools.js');
+  const codexCli = path.join(f.packageRoot, 'dist/codex/bin/sheriff-tools.js');
   ok(f.run(claudeCli, ['init-project']));
   ok(f.run(claudeCli, ['write-handoff', 'shared'], 'resume from either tool'));
   assert.equal(ok(f.run(codexCli, ['read-handoff', 'shared'])), 'resume from either tool');
-  assert.match(read(path.join(f.project, '.claude/commands/sheriff/update.md')), /--tool claude --local --silent/);
+  assert.deepEqual(fs.readdirSync(path.join(f.project, '.claude/sheriff')), ['.install-manifest.json']);
+  assert.match(read(path.join(f.project, '.claude/commands/sheriff/update.md')), /node_modules\/@dagim_codes\/sheriff\/dist\/claude\/commands\/update.md/);
+  assert.match(read(path.join(f.packageRoot, 'dist/claude/commands/update.md')), /--tool claude --local --silent/);
   ok(f.setup('--tool', 'claude', '--local', '--uninstall', '--silent'));
   assert.deepEqual(json(settingsFile), original);
   assert.equal(read(path.join(f.project, '.claude/agents/sheriff-personal.md')), 'personal agent');
@@ -120,7 +127,7 @@ test('legacy scoped invocation still targets Claude, and legacy hooks migrate on
 });
 
 test('bad arguments fail before any installation', (t) => {
-  const f = fixture(t);
+  const f = fixture(t, false);
   for (const args of [[], ['--tool'], ['--tool='], ['--tool', 'cursor', '--local'], ['--tool', 'codex'], ['--local', '--global'], ['--typo'], ['--tool', 'codex', '--tool', 'claude']]) {
     assert.notEqual(f.setup(...args).status, 0, JSON.stringify(args));
     assert.deepEqual(fs.readdirSync(f.project), []);
@@ -158,7 +165,7 @@ test('unrelated skill directories and symlinks are preserved', (t) => {
 test('installed runtime can claim, complete, update coverage and preserve handoffs', (t) => {
   const f = fixture(t);
   ok(f.setup('--tool', 'codex', '--local', '--silent'));
-  const cli = path.join(f.project, '.agents/skills/sheriff/bin/sheriff-tools.js');
+  const cli = path.join(f.packageRoot, 'dist/codex/bin/sheriff-tools.js');
   ok(f.run(cli, ['init-project']));
   put(path.join(f.project, '.sheriff/PHASES.md'), '# Phases\n| ID | Title | Status | Tests |\n| 1.1 | utilities | [ ] | 0 |\n\n### 1.1\n```\nlock: —\nlock_time: —\n```\n');
   put(path.join(f.project, '.sheriff/TEST_MAP.md'), '| Area | File | Unit | E2E | Complexity | Notes |\n|------|------|------|-----|------------|-------|\n| util | src/add.js | ❌ needed | — N/A | low | |\n');
@@ -175,12 +182,12 @@ test('Claude hooks accept stdin, preserve quoted paths, and report context warni
   const f = fixture(t);
   ok(f.setup('--tool', 'claude', '--local', '--silent'));
   const settings = json(path.join(f.project, '.claude/settings.json'));
-  const cli = path.join(f.project, '.claude/sheriff/bin/sheriff-tools.js');
+  const cli = path.join(f.packageRoot, 'dist/claude/bin/sheriff-tools.js');
   ok(f.run(cli, ['init-project']));
   ok(f.run(cli, ['write-config'], '{}'));
   put(path.join(f.project, '.sheriff/PHASES.md'), '## Phase 1\n| 1.1 | tests | 🔒 | 0 |');
   const data = { session_id: 'isolated-session', cwd: f.project, context_window: { remaining_percentage: 24 } };
-  const env = { ...process.env, HOOK_DATA: '', TMPDIR: f.dir, TMP: f.dir, TEMP: f.dir };
+  const env = { ...f.env, HOOK_DATA: '', TMPDIR: f.dir, TMP: f.dir, TEMP: f.dir };
   const hook = (command, input) => spawnSync(command, { shell: true, cwd: f.project, env, input: JSON.stringify(input), encoding: 'utf8', timeout: 10000 });
   assert.match(ok(hook(settings.statusLine.command, data)), /24%/);
   const monitor = settings.hooks.PostToolUse[0].hooks[0].command;
@@ -192,24 +199,81 @@ test('Claude hooks accept stdin, preserve quoted paths, and report context warni
   assert.equal(ok(f.run(path.join(f.project, '.claude/hooks/sheriff-context-monitor.js'), [], '{bad JSON')), '');
 });
 
-test('published tarball includes the Codex integration and installs without package dependencies', (t) => {
+test('local setup requires a declared and installed package and fails before writing adapters', (t) => {
+  const f = fixture(t, false);
+  let result = f.setup('--tool', 'both', '--local', '--silent');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /npm install --save-dev @dagim_codes\/sheriff@latest/);
+  assert.deepEqual(fs.readdirSync(f.project), []);
+  installPackage(f.project);
+  put(path.join(f.project, 'package.json'), '{"private":true}');
+  result = f.setup('--tool', 'both', '--local', '--silent');
+  assert.notEqual(result.status, 0, 'An undeclared package must not provide a persistent project runtime');
+  assert.equal(fs.existsSync(path.join(f.project, '.agents')), false);
+  assert.equal(fs.existsSync(path.join(f.project, '.claude')), false);
+  put(path.join(f.project, 'package.json'), JSON.stringify({ devDependencies: { '@dagim_codes/sheriff': '0.1.5' } }));
+  fs.rmSync(path.join(f.packageRoot, 'dist/codex'), { recursive: true });
+  assert.notEqual(f.setup('--tool', 'both', '--local', '--silent').status, 0);
+  assert.equal(fs.existsSync(path.join(f.project, '.claude')), false);
+});
+
+test('local runtime survives a project move and re-registration refreshes Claude statusline paths', (t) => {
   const f = fixture(t);
-  const npmCli = process.env.npm_execpath;
-  assert.ok(npmCli, 'Run packaging checks through npm test.');
-  const packed = spawnSync(process.execPath, [npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', f.dir], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
+  ok(f.setup('--tool', 'both', '--local', '--silent'));
+  const moved = path.join(f.dir, 'moved project');
+  fs.renameSync(f.project, moved);
+  const skill = path.join(moved, '.agents/skills/sheriff');
+  for (const match of read(path.join(skill, 'SKILL.md')).matchAll(/\]\(([^)]+)\)/g)) {
+    assert.ok(fs.existsSync(path.resolve(skill, match[1])), `Missing moved skill resource ${match[1]}`);
+  }
+  const env = { ...f.env, CLAUDE_PROJECT_DIR: moved };
+  const cli = path.join(moved, 'node_modules/@dagim_codes/sheriff/dist/codex/bin/sheriff-tools.js');
+  const run = (file, args, input = '') => spawnSync(process.execPath, [file, ...args], { cwd: moved, env, input, encoding: 'utf8', timeout: 10000 });
+  ok(run(cli, ['init-project']));
+  ok(run(cli, ['write-config'], '{}'));
+  ok(run(installer, ['--tool', 'both', '--local', '--silent']));
+  const settings = json(path.join(moved, '.claude/settings.json'));
+  const result = spawnSync(settings.statusLine.command, {
+    shell: true, cwd: moved, env, input: JSON.stringify({ session_id: 'moved-session', cwd: moved, context_window: { remaining_percentage: 24 } }), encoding: 'utf8', timeout: 10000,
+  });
+  assert.match(ok(result), /24%/);
+});
+
+test('uninstall works after node_modules is removed and preserves state and package declaration', (t) => {
+  const f = fixture(t);
+  ok(f.setup('--tool', 'both', '--local', '--silent'));
+  const declaration = read(path.join(f.project, 'package.json'));
+  put(path.join(f.project, '.sheriff/personal.md'), 'keep state');
+  fs.rmSync(path.join(f.project, 'node_modules'), { recursive: true });
+  ok(f.setup('--tool', 'both', '--local', '--uninstall', '--silent'));
+  assert.equal(fs.existsSync(path.join(f.project, '.agents/skills/sheriff')), false);
+  assert.equal(fs.existsSync(path.join(f.project, '.claude/sheriff')), false);
+  assert.equal(read(path.join(f.project, '.sheriff/personal.md')), 'keep state');
+  assert.equal(read(path.join(f.project, 'package.json')), declaration);
+});
+
+test('published tarball installs offline as a project devDependency with usable thin integrations', (t) => {
+  const f = fixture(t, false);
+  const npm = (args, options) => process.env.npm_execpath
+    ? spawnSync(process.execPath, [process.env.npm_execpath, ...args], options)
+    : spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, { ...options, shell: process.platform === 'win32' });
+  const packed = npm(['pack', '--ignore-scripts', '--json', '--pack-destination', f.dir], { cwd: ROOT, encoding: 'utf8', timeout: 30000 });
   const manifest = JSON.parse(ok(packed))[0];
   const files = manifest.files.map((file) => file.path);
-  for (const expected of ['LICENSE', 'integrations/codex/SKILL.md', 'sheriff/runtime.md', 'bin/install.js', 'workflows/run.md', 'hooks/dist/sheriff-context-monitor.js']) assert.ok(files.includes(expected), expected);
+  for (const expected of ['LICENSE', 'integrations/codex/SKILL.md', 'sheriff/runtime.md', 'bin/install.js', 'workflows/run.md', 'hooks/dist/sheriff-context-monitor.js', 'dist/codex/SKILL.md', 'dist/codex/bin/sheriff-tools.js', 'dist/claude/commands/run.md']) assert.ok(files.includes(expected), expected);
   assert.equal(files.some((file) => file.startsWith('tests/') || file.startsWith('node_modules/')), false);
-  const installed = spawnSync(process.execPath, [npmCli, 'exec', '--offline', '--yes',
-    `--package=${path.join(f.dir, manifest.filename)}`, '--', 'sheriff', '--tool', 'both', '--local', '--silent'], {
+  const npmOptions = {
     cwd: f.project,
     env: { ...f.env, npm_config_cache: path.join(f.dir, 'npm-cache') },
     encoding: 'utf8', timeout: 30000,
-  });
-  ok(installed);
+  };
+  ok(npm(['install', '--offline', '--save-dev', '--ignore-scripts', '--no-audit', '--no-fund', path.join(f.dir, manifest.filename)], npmOptions));
+  assert.ok(json(path.join(f.project, 'package.json')).devDependencies['@dagim_codes/sheriff']);
+  assert.ok(fs.existsSync(path.join(f.project, 'package-lock.json')));
+  ok(npm(['exec', '--offline', '--', 'sheriff', '--tool', 'both', '--local', '--silent'], npmOptions));
   assert.ok(fs.existsSync(path.join(f.project, '.claude/commands/sheriff/run.md')));
-  const cli = path.join(f.project, '.agents/skills/sheriff/bin/sheriff-tools.js');
+  assert.deepEqual(fs.readdirSync(path.join(f.project, '.agents/skills/sheriff')), ['SKILL.md']);
+  const cli = path.join(f.packageRoot, 'dist/codex/bin/sheriff-tools.js');
   ok(f.run(cli, ['init-project']));
   assert.deepEqual(JSON.parse(ok(f.run(cli, ['get-status']))), { initialized: false });
 });

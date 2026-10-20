@@ -10,6 +10,7 @@ const pkg = require('../package.json');
 const ROOT = path.resolve(__dirname, '..');
 const TOOLS = ['claude', 'codex'];
 const HOOK_FILES = ['sheriff-context-monitor.js', 'sheriff-statusline.js'];
+const SKILL_MARKER = '<!-- sheriff-managed: package -->';
 const agentFiles = fs.readdirSync(path.join(ROOT, 'agents')).filter((f) => f.startsWith('sheriff-'));
 
 function parseArgs(args) {
@@ -35,7 +36,7 @@ function parseArgs(args) {
 }
 
 function help() {
-  console.log(`Sheriff installer\n\nUsage: npx ${pkg.name} [--tool claude|codex|both] [--local|--global]\n\n  --tool claude,codex  Install for both tools (also: --tool both)\n  --local             Install for the current project\n  --global            Install for all your projects\n  --uninstall         Remove the selected integrations; keep project state and tests\n  --silent            Suppress progress output; requires an explicit scope\n  --help              Show this help\n\nWithout flags, choose tools and scope interactively. Existing --local/--global\ncommands without --tool continue to target Claude Code.`);
+  console.log(`Sheriff installer\n\nUsage: npx ${pkg.name}@latest [--tool claude|codex|both] [--local|--global]\n\n  --tool claude,codex  Install for both tools (also: --tool both)\n  --local             Register the current project's installed npm dependency\n  --global            Install for all your projects\n  --uninstall         Remove the selected integrations; keep project state and tests\n  --silent            Suppress progress output; requires an explicit scope\n  --help              Show this help\n\nLocal setup first requires npm install --save-dev ${pkg.name}@latest.\nWithout flags, choose tools and scope interactively. Existing --local/--global\ncommands without --tool continue to target Claude Code.`);
 }
 
 function ask(rl, question) {
@@ -65,27 +66,36 @@ function readSettings(dir) {
   return settings;
 }
 
-function isSheriffHook(hook, dir) {
+function isSheriffHook(hook, dir, scope) {
   if (typeof hook?.command !== 'string') return false;
   return HOOK_FILES.some((file) => {
     const target = path.join(dir, 'hooks', file);
-    return [shellQuote(target), target, `"${target}"`].some((quoted) => hook.command === `node ${quoted}`);
+    return (scope === 'local' && hook.command === localHookCommand(file)) ||
+      [shellQuote(target), target, `"${target}"`].some((quoted) => hook.command === `node ${quoted}`);
   });
 }
 
-function cleanHooks(settings, dir) {
+function cleanHooks(settings, dir, scope, previousStatusLine) {
   for (const [event, entries] of Object.entries(settings.hooks || {})) {
     settings.hooks[event] = entries.flatMap((entry) => {
-      if (isSheriffHook(entry, dir)) return [];
+      if (isSheriffHook(entry, dir, scope)) return [];
       if (!Array.isArray(entry?.hooks)) return [entry];
-      const hooks = entry.hooks.filter((hook) => !isSheriffHook(hook, dir));
+      const hooks = entry.hooks.filter((hook) => !isSheriffHook(hook, dir, scope));
       if (hooks.length === entry.hooks.length) return [entry];
       return hooks.length ? [{ ...entry, hooks }] : [];
     });
     if (!settings.hooks[event].length) delete settings.hooks[event];
   }
   if (settings.hooks && !Object.keys(settings.hooks).length) delete settings.hooks;
-  if (isSheriffHook(settings.statusLine, dir)) delete settings.statusLine;
+  const previousIsSheriff = typeof previousStatusLine === 'string' && path.isAbsolute(previousStatusLine) &&
+    path.basename(previousStatusLine) === HOOK_FILES[1] && path.basename(path.dirname(previousStatusLine)) === 'hooks' &&
+    path.basename(path.dirname(path.dirname(previousStatusLine))) === '.claude';
+  if (isSheriffHook(settings.statusLine, dir, scope) ||
+    (previousIsSheriff && settings.statusLine?.command === `node ${shellQuote(previousStatusLine)}`)) delete settings.statusLine;
+}
+
+function localHookCommand(file) {
+  return `node "${'${CLAUDE_PROJECT_DIR}'}/.claude/hooks/${file}"`;
 }
 
 function shellQuote(value) {
@@ -114,34 +124,107 @@ function collect(src, dest, tool, scope, files) {
   }
 }
 
-function preflight(tool, base, scope, uninstall) {
+function projectDependency(base, tools) {
+  const instruction = `Run npm install --save-dev ${pkg.name}@latest in this project, then rerun the Sheriff installer with --local.`;
+  const projectFile = path.join(base, 'package.json');
+  if (!fs.existsSync(projectFile)) throw new Error(`Local installs require a declared project dependency. ${instruction}`);
+  const project = JSON.parse(fs.readFileSync(projectFile, 'utf8'));
+  if (!project || !(project.devDependencies?.[pkg.name] || project.dependencies?.[pkg.name])) {
+    throw new Error(`Local installs require ${pkg.name} in package.json dependencies or devDependencies. ${instruction}`);
+  }
+  const root = path.join(base, 'node_modules', pkg.name);
+  try {
+    const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    if (metadata.name !== pkg.name || typeof metadata.version !== 'string') throw new Error('invalid package metadata');
+    for (const tool of tools) {
+      const runtime = path.join(root, 'dist', tool);
+      for (const file of ['runtime.md', 'package.json', 'bin/sheriff-tools.js', ...(tool === 'codex' ? ['SKILL.md'] : [])]) {
+        if (!fs.statSync(path.join(runtime, file)).isFile()) throw new Error(`missing ${tool} runtime ${file}`);
+      }
+      const bundled = JSON.parse(fs.readFileSync(path.join(runtime, 'package.json'), 'utf8'));
+      if (bundled.name !== metadata.name || bundled.version !== metadata.version) throw new Error(`mismatched ${tool} runtime metadata`);
+      if (!Array.isArray(bundled.files) || !bundled.files.length) throw new Error(`missing ${tool} runtime inventory`);
+      for (const file of bundled.files) {
+        if (typeof file !== 'string' || !file || path.isAbsolute(file) || file.split(/[\\/]/).some((part) => part === '..' || part === '.')) {
+          throw new Error(`invalid ${tool} runtime inventory path`);
+        }
+        if (!fs.statSync(path.join(runtime, file)).isFile()) throw new Error(`missing ${tool} runtime ${file}`);
+      }
+    }
+    return { root, version: metadata.version };
+  } catch (error) {
+    throw new Error(`The project's Sheriff dependency is missing, incomplete, or predates package-backed installs (${error.message}). ${instruction}`);
+  }
+}
+
+function wrapper(source, destination, skill = false) {
+  const content = fs.readFileSync(source, 'utf8');
+  const frontmatter = content.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/)?.[0];
+  if (!frontmatter) throw new Error(`Missing integration metadata: ${source}`);
+  const relative = path.relative(path.dirname(destination), source).split(path.sep).join('/');
+  return Buffer.from(`${frontmatter}\n${skill ? SKILL_MARKER + '\n\n' : ''}Read and follow [Sheriff instructions](${relative}), preserving the user's request and arguments. Resolve that document's resources relative to its own location, and execute project commands in the user's project root.\n\nIf the resource is missing, run \`npm install\` in the project to restore its declared Sheriff dependency before continuing.\n`);
+}
+
+function preflight(tool, base, scope, uninstall, dependency) {
   const dir = path.join(base, '.claude');
   const root = tool === 'claude' ? path.join(dir, 'sheriff') : path.join(base, '.agents', 'skills', 'sheriff');
   const manifestFile = path.join(root, '.install-manifest.json');
   const packageFile = path.join(root, 'package.json');
+  const skillFile = path.join(root, 'SKILL.md');
   assertFile(packageFile, base);
   assertFile(manifestFile, base);
+  assertFile(skillFile, base);
+  const manifest = fs.existsSync(manifestFile) ? JSON.parse(fs.readFileSync(manifestFile, 'utf8')) : null;
+  if (fs.existsSync(manifestFile) && (!manifest || !Array.isArray(manifest.files))) throw new Error(`Invalid installation manifest: ${manifestFile}`);
+  const markedSkill = tool === 'codex' && fs.existsSync(skillFile) && fs.readFileSync(skillFile, 'utf8').split(/\r?\n/).includes(SKILL_MARKER);
   const installed = fs.existsSync(root);
-  if (installed && (!fs.existsSync(packageFile) || ![pkg.name, '@dagim_s/sheriff'].includes(JSON.parse(fs.readFileSync(packageFile, 'utf8')).name))) {
+  const packageName = fs.existsSync(packageFile) ? JSON.parse(fs.readFileSync(packageFile, 'utf8')).name : null;
+  if (installed && (packageName ? ![pkg.name, '@dagim_s/sheriff'].includes(packageName) :
+    !markedSkill && !(manifest?.name === pkg.name && manifest.layout === 'package'))) {
     throw new Error(`Existing directory is not a Sheriff installation: ${root}`);
   }
-  const files = new Map();
-  collect(path.join(ROOT, 'sheriff'), root, tool, scope, files);
-  collect(path.join(ROOT, 'workflows'), path.join(root, 'workflows'), tool, scope, files);
-  collect(path.join(ROOT, 'agents'), path.join(root, 'agents'), tool, scope, files);
-  collect(path.join(ROOT, 'package.json'), packageFile, tool, scope, files);
+  const legacyFiles = new Map();
+  collect(path.join(ROOT, 'sheriff'), root, tool, scope, legacyFiles);
+  collect(path.join(ROOT, 'workflows'), path.join(root, 'workflows'), tool, scope, legacyFiles);
+  collect(path.join(ROOT, 'agents'), path.join(root, 'agents'), tool, scope, legacyFiles);
+  collect(path.join(ROOT, 'package.json'), packageFile, tool, scope, legacyFiles);
   if (tool === 'codex') {
-    collect(path.join(ROOT, 'commands', 'sheriff'), path.join(root, 'commands'), tool, scope, files);
-    collect(path.join(ROOT, 'integrations', 'codex', 'SKILL.md'), path.join(root, 'SKILL.md'), tool, scope, files);
+    collect(path.join(ROOT, 'commands', 'sheriff'), path.join(root, 'commands'), tool, scope, legacyFiles);
+    collect(path.join(ROOT, 'integrations', 'codex', 'SKILL.md'), path.join(root, 'SKILL.md'), tool, scope, legacyFiles);
   } else {
-    collect(path.join(ROOT, 'commands', 'sheriff'), path.join(dir, 'commands', 'sheriff'), tool, scope, files);
-    for (const file of agentFiles) collect(path.join(ROOT, 'agents', file), path.join(dir, 'agents', file), tool, scope, files);
-    for (const file of HOOK_FILES) collect(path.join(ROOT, 'hooks', 'dist', file), path.join(dir, 'hooks', file), tool, scope, files);
+    collect(path.join(ROOT, 'commands', 'sheriff'), path.join(dir, 'commands', 'sheriff'), tool, scope, legacyFiles);
+    for (const file of agentFiles) collect(path.join(ROOT, 'agents', file), path.join(dir, 'agents', file), tool, scope, legacyFiles);
+    for (const file of HOOK_FILES) collect(path.join(ROOT, 'hooks', 'dist', file), path.join(dir, 'hooks', file), tool, scope, legacyFiles);
+  }
+  const files = scope === 'global' ? legacyFiles : new Map();
+  if (scope === 'local' && !uninstall) {
+    const runtime = path.join(dependency.root, 'dist', tool);
+    if (tool === 'codex') {
+      const source = path.join(runtime, 'SKILL.md');
+      files.set(skillFile, wrapper(source, skillFile, true));
+    } else {
+      for (const file of fs.readdirSync(path.join(runtime, 'commands'))) {
+        const source = path.join(runtime, 'commands', file);
+        const destination = path.join(dir, 'commands', 'sheriff', file);
+        files.set(destination, wrapper(source, destination));
+      }
+      for (const file of fs.readdirSync(path.join(runtime, 'agents')).filter((file) => file.startsWith('sheriff-') && file.endsWith('.md'))) {
+        const source = path.join(runtime, 'agents', file);
+        const destination = path.join(dir, 'agents', file);
+        files.set(destination, wrapper(source, destination));
+      }
+      for (const file of HOOK_FILES) {
+        const source = path.join(dependency.root, 'hooks', 'dist', file);
+        if (!fs.statSync(source).isFile()) throw new Error(`Missing Sheriff hook: ${source}`);
+        const destination = path.join(dir, 'hooks', file);
+        const relative = path.relative(path.dirname(destination), source).split(path.sep).join('/');
+        files.set(destination, Buffer.from(`'use strict';\nrequire(${JSON.stringify(relative)});\n`));
+      }
+    }
   }
 
   let owned = new Set();
-  if (fs.existsSync(manifestFile)) {
-    const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  if (manifest) {
     if (!Array.isArray(manifest.files)) throw new Error(`Invalid installation manifest: ${manifestFile}`);
     for (const relative of manifest.files) {
       if (typeof relative !== 'string' || path.isAbsolute(relative) || relative.split(/[\\/]/).includes('..')) {
@@ -156,9 +239,9 @@ function preflight(tool, base, scope, uninstall) {
       if (!withinRoot && !external) throw new Error(`Manifest path is outside Sheriff: ${relative}`);
       owned.add(file);
     }
-  } else if (installed) {
+  } else if (installed && packageName) {
     // Older releases had no inventory; migrate only paths in the known package layout.
-    owned = new Set([...files].filter(([file, content]) => {
+    owned = new Set([...legacyFiles].filter(([file, content]) => {
       if (file.startsWith(root + path.sep)) return true;
       if (!fs.existsSync(file)) return false;
       assertFile(file, base);
@@ -173,6 +256,7 @@ function preflight(tool, base, scope, uninstall) {
         (path.dirname(file) === path.join(dir, 'agents') && fs.existsSync(oldAgent) && previous.equals(fs.readFileSync(oldAgent)));
     }).map(([file]) => file));
   }
+  if (markedSkill) owned.add(skillFile);
   const changes = new Map();
   for (const file of new Set([...files.keys(), ...owned])) {
     assertFile(file, base);
@@ -183,21 +267,21 @@ function preflight(tool, base, scope, uninstall) {
       changes.set(file, files.get(file) ?? null);
     }
   }
-  if (uninstall) {
-    if (installed) changes.set(manifestFile, null);
-  } else {
-    changes.set(manifestFile, Buffer.from(JSON.stringify({ files: [...files.keys()].map((file) => path.relative(base, file)) }, null, 2) + '\n'));
+  const inventory = { name: pkg.name, layout: scope === 'local' ? 'package' : 'copied', files: [...files.keys()].map((file) => path.relative(base, file)) };
+  if (uninstall || (scope === 'local' && tool === 'codex')) {
+    if (fs.existsSync(manifestFile)) changes.set(manifestFile, null);
   }
   if (tool === 'claude') {
     const settingsFile = path.join(dir, 'settings.json');
     assertFile(settingsFile, base);
     const settings = readSettings(dir);
     if (!uninstall || installed) {
-      cleanHooks(settings, dir);
+      cleanHooks(settings, dir, scope, manifest?.statusLine);
       if (!uninstall) {
+        const hookCommand = (file) => scope === 'local' ? localHookCommand(file) : `node ${shellQuote(path.join(dir, 'hooks', file))}`;
         settings.hooks ||= {};
         settings.hooks.PostToolUse ||= [];
-        settings.hooks.PostToolUse.push({ hooks: [{ type: 'command', command: `node ${shellQuote(path.join(dir, 'hooks', HOOK_FILES[0]))}` }] });
+        settings.hooks.PostToolUse.push({ hooks: [{ type: 'command', command: hookCommand(HOOK_FILES[0]) }] });
         let inheritedStatusLine = false;
         if (scope === 'local') {
           try {
@@ -208,9 +292,13 @@ function preflight(tool, base, scope, uninstall) {
         if (!Object.hasOwn(settings, 'statusLine') && !inheritedStatusLine) {
           settings.statusLine = { type: 'command', command: `node ${shellQuote(path.join(dir, 'hooks', HOOK_FILES[1]))}` };
         }
+        if (isSheriffHook(settings.statusLine, dir, scope)) inventory.statusLine = path.join(dir, 'hooks', HOOK_FILES[1]);
       }
       if (!uninstall || fs.existsSync(settingsFile)) changes.set(settingsFile, Buffer.from(JSON.stringify(settings, null, 2) + '\n'));
     }
+  }
+  if (!uninstall && (scope === 'global' || tool === 'claude')) {
+    changes.set(manifestFile, Buffer.from(JSON.stringify(inventory, null, 2) + '\n'));
   }
   return { tool, root, base, changes };
 }
@@ -313,11 +401,12 @@ async function main() {
   }
   try {
     fs.writeFileSync(descriptor, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }) + '\n');
-    const targets = selected.map((tool) => preflight(tool, base, scope, options.uninstall));
+    const dependency = scope === 'local' && !options.uninstall ? projectDependency(base, selected) : null;
+    const targets = selected.map((tool) => preflight(tool, base, scope, options.uninstall, dependency));
     apply(targets);
     for (const { tool, root } of targets) {
       if (options.uninstall) log(`Uninstalled ${tool}. Project state, tests, and unowned files were preserved.`);
-      else log(`Installed ${tool} → ${root}\nRun ${tool === 'codex' ? '$sheriff help in Codex (restart to discover the skill).' : '/sheriff:help in Claude Code.'}`);
+      else log(`Installed ${tool} → ${root}${dependency ? ` (project dependency ${dependency.version})` : ''}\nRun ${tool === 'codex' ? '$sheriff help in Codex (restart to discover the skill).' : '/sheriff:help in Claude Code.'}`);
     }
   } finally {
     fs.closeSync(descriptor);

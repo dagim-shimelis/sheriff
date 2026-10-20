@@ -33,10 +33,11 @@
 *Saddle up. A small install. A better habit.*
 
 ```bash
-npx @dagim_codes/sheriff
+npm install --save-dev @dagim_codes/sheriff@latest
+npx sheriff --tool both --local
 ```
 
-Choose Claude Code, Codex, or both, then project or user scope. Open your AI tool in the project and start:
+This registers both Claude Code and Codex for the project; choose `--tool claude` or `--tool codex` for just one. User-wide installation is also available below and needs no project dependency. Open your AI tool in the project and start:
 
 | Claude Code | Codex |
 | --- | --- |
@@ -47,12 +48,17 @@ Sheriff uses your existing AI session and test runner; no separate model API key
 Explicit install commands:
 
 ```bash
-npx @dagim_codes/sheriff --tool claude --local
-npx @dagim_codes/sheriff --tool codex --local
-npx @dagim_codes/sheriff --tool both --global
+# Shared project: keep the runtime in node_modules and register small adapters.
+npm install --save-dev @dagim_codes/sheriff@latest
+npx sheriff --tool both --local
+
+# Personal installation across projects: keep the runtime in your home directory.
+npx @dagim_codes/sheriff@latest --tool both --global
 ```
 
-`--tool claude,codex` also selects both. Existing commands with `--local` or `--global` but no `--tool` target Claude Code. Non-interactive use requires a scope; add `--silent` to suppress normal output. `npm install` downloads the package; `npx` runs the installer.
+Use `--tool claude` or `--tool codex` for one integration; `--tool claude,codex` also selects both. Existing commands with `--local` or `--global` but no `--tool` target Claude Code. Non-interactive use requires a scope; add `--silent` to suppress normal output. The project installer requires a declared, installed dependency and explains how to install it if missing; it does not run your package manager automatically.
+
+Project installs keep the runtime, workflows, templates, and role instructions inside `node_modules/@dagim_codes/sheriff/`. Codex adds only `.agents/skills/sheriff/SKILL.md`. Claude keeps small native command, agent, and hook adapters plus its settings and ownership inventory. Commit the adapters, `package.json`, and your lockfile for a shared installation; teammates restore the runtime with their usual dependency install. Keep `node_modules/` ignored, and install development dependencies when using Sheriff.
 
 Requirements: Node.js 18+, a supported AI tool with file/shell access, and a JavaScript or TypeScript project. Sheriff reuses existing runners and can help configure a missing runner within your authorized scope. Browser/service-dependent tests require their own working environment.
 
@@ -164,23 +170,38 @@ Claude installation includes a statusline and context monitor while preserving a
 
 ## Update and uninstall
 
-Use the same tool and scope as installation:
+For a project installation, update the dependency, then refresh its adapters using the same tool selection:
 
 ```bash
-npx @dagim_codes/sheriff@latest --tool codex --local
-npx @dagim_codes/sheriff --tool codex --local --uninstall
+npm install --save-dev @dagim_codes/sheriff@latest
+npx sheriff --tool codex --local
 ```
 
-Choose `--tool both` for both integrations. Installed `update` commands retain their tool and scope. Updates/uninstall preserve project `.sheriff/` and tests. The installer tracks its files, preserves unknown files/settings, and refuses unrelated destination collisions. Normal I/O failures roll back installation writes; abrupt process or machine termination is not a transactional filesystem guarantee.
+To remove the project integration:
+
+```bash
+npx sheriff --tool codex --local --uninstall
+# After removing every integration that uses the dependency:
+npm uninstall --save-dev @dagim_codes/sheriff
+```
+
+User-wide installations keep their existing update and uninstall commands:
+
+```bash
+npx @dagim_codes/sheriff@latest --tool both --global
+npx @dagim_codes/sheriff@latest --tool both --global --uninstall
+```
+
+Choose `--tool both` for both integrations. Installed `update` commands retain their tool and scope. Updating an older project installation migrates its owned copied files to the small adapters while preserving unknown files, project `.sheriff/`, and tests. The installer tracks its files, preserves unknown settings, and refuses unrelated destination collisions. Integration removal leaves the package declaration unchanged; if `node_modules` is already missing, use `npx @dagim_codes/sheriff@latest --tool codex --local --uninstall`. Normal I/O failures roll back installation writes; abrupt process or machine termination is not a transactional filesystem guarantee.
 
 | Integration | Project scope | User scope |
 | --- | --- | --- |
-| Claude commands | `.claude/commands/sheriff/` | `~/.claude/commands/sheriff/` |
-| Claude roles/runtime | `.claude/agents/sheriff-*.md`, `.claude/sheriff/` | Same paths under home |
-| Claude settings/hooks | `.claude/settings.json`, `.claude/hooks/` | Same paths under home |
-| Codex skill/runtime | `.agents/skills/sheriff/` | `~/.agents/skills/sheriff/` |
+| Shared runtime and instructions | `node_modules/@dagim_codes/sheriff/dist/{claude,codex}/` | Bundled under each integration |
+| Claude commands/agents | Small adapters in `.claude/commands/sheriff/` and `.claude/agents/` | Full instructions under the same home paths |
+| Claude settings/hooks/inventory | `.claude/settings.json`, small `.claude/hooks/` adapters, `.claude/sheriff/.install-manifest.json` | Full hooks and `.claude/sheriff/` runtime under home |
+| Codex skill | `.agents/skills/sheriff/SKILL.md` entry point | Self-contained `~/.agents/skills/sheriff/` |
 
-Codex installation does not modify AGENTS.md or Codex configuration. Local runtime references are relative; Claude hook registration should be rerun after moving a project to another machine. Other AI tools are not yet supported integrations.
+Codex installation does not modify AGENTS.md or Codex configuration. Local runtime references are relative; rerun Claude registration after moving or cloning a project to refresh its statusline path. Missing development dependencies must be restored before running Sheriff. Other AI tools are not yet supported integrations.
 
 ## Benchmarks
 
@@ -204,7 +225,7 @@ npm run benchmark
 npm pack --dry-run
 ```
 
-There are no package dependencies. Hook builds use Node's syntax check and copy the standalone scripts. `pretest` and `prepack` rebuild hooks; `prepublishOnly` runs tests. Tests use temporary homes/projects for installation, runtime state, recovery, and packaging contracts.
+Hook builds use Node's syntax check and copy the standalone scripts. `pretest` and `prepack` rebuild hooks and the per-tool instruction/runtime bundles; `prepublishOnly` runs tests. Tests use temporary homes/projects for installation, runtime state, recovery, migration, and an offline npm tarball installation.
 
 `npm run --silent benchmark -- --json` emits machine-readable samples and provenance. `npm run --silent benchmark:report -- <current.json> [baseline.json]` renders a Markdown summary, suppressing percentage comparisons for incompatible runs. Both commands run locally without model or network calls.
 

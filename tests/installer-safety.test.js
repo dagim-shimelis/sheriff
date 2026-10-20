@@ -5,12 +5,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
+const { installPackage } = require('./fixtures/install-package');
 const ROOT = path.resolve(__dirname, '..');
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sheriff-safety-'));
   const project = path.join(dir, 'project');
   const home = path.join(dir, 'home');
   fs.mkdirSync(project); fs.mkdirSync(home);
+  installPackage(project);
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const env = { ...process.env, HOME: home, USERPROFILE: home, TMPDIR: dir, NODE_OPTIONS: '' };
   return { dir, project, home, env, setup: (args, extraEnv = {}) => spawnSync(process.execPath, [path.join(ROOT, 'bin/install.js'), ...args, '--silent'], { cwd: project, env: { ...env, ...extraEnv }, encoding: 'utf8', timeout: 10000 }) };
@@ -52,7 +54,8 @@ test('update removes obsolete inventoried files and uninstall retains personal i
   ok(f.setup(local));
   const root = path.join(f.project, '.agents/skills/sheriff');
   const manifest = path.join(root, '.install-manifest.json');
-  const inventory = JSON.parse(read(manifest));
+  const inventory = { files: ['.agents/skills/sheriff/SKILL.md', '.agents/skills/sheriff/package.json'] };
+  put(path.join(root, 'package.json'), JSON.stringify({ name: '@dagim_codes/sheriff' }));
   const old = path.join(root, 'commands/obsolete.md');
   put(old, 'old command');
   inventory.files.push(path.relative(f.project, old));
@@ -60,6 +63,8 @@ test('update removes obsolete inventoried files and uninstall retains personal i
   put(path.join(root, 'personal.md'), 'keep');
   ok(f.setup(local));
   assert.equal(fs.existsSync(old), false);
+  assert.equal(fs.existsSync(manifest), false);
+  assert.equal(fs.existsSync(path.join(root, 'package.json')), false);
   ok(f.setup([...local, '--uninstall']));
   assert.equal(read(path.join(root, 'personal.md')), 'keep');
   assert.equal(fs.existsSync(path.join(root, 'SKILL.md')), false);
@@ -68,10 +73,11 @@ test('update removes obsolete inventoried files and uninstall retains personal i
 test('old npm scope supports upgrade and uninstall while foreign package names are rejected', (t) => {
   for (const uninstall of [false, true]) {
     const f = fixture(t);
-    ok(f.setup(local));
+    const global = ['--tool', 'both', '--global'];
+    ok(f.setup(global));
     const packages = ['.claude/sheriff/package.json', '.agents/skills/sheriff/package.json']
-      .map((relative) => path.join(f.project, relative));
-    const args = uninstall ? [...local, '--uninstall'] : local;
+      .map((relative) => path.join(f.home, relative));
+    const args = uninstall ? [...global, '--uninstall'] : global;
     for (const file of packages) put(file, JSON.stringify({ name: '@someone-else/sheriff' }));
     const rejected = f.setup(args);
     assert.notEqual(rejected.status, 0);
@@ -112,7 +118,7 @@ test('late write failure rolls back both integrations and settings', (t) => {
   const settings = path.join(f.project, '.claude/settings.json');
   put(command, 'original installed command');
   const before = read(settings);
-  const failAt = path.join(fs.realpathSync(f.project), '.agents/skills/sheriff/.install-manifest.json');
+  const failAt = path.join(fs.realpathSync(f.project), '.agents/skills/sheriff/SKILL.md');
   const preload = path.join(f.dir, 'fail-write.cjs');
   put(preload, `const fs = require('fs'); const rename = fs.renameSync; let failed = false; fs.renameSync = function(a, b) { if (!failed && b === ${JSON.stringify(failAt)}) { failed = true; throw new Error('simulated disk failure'); } return rename.apply(this, arguments); };`);
   const result = f.setup(local, { NODE_OPTIONS: `--require=${preload}` });
@@ -126,11 +132,11 @@ test('late write failure rolls back both integrations and settings', (t) => {
 test('manifest traversal and symlink destinations fail before writes', (t) => {
   const f = fixture(t);
   ok(f.setup(local));
-  const manifest = path.join(f.project, '.agents/skills/sheriff/.install-manifest.json');
+  const manifest = path.join(f.project, '.claude/sheriff/.install-manifest.json');
   const original = read(manifest);
   put(manifest, JSON.stringify({ files: ['../outside'] }));
   assert.notEqual(f.setup([...local, '--uninstall']).status, 0);
-  assert.ok(fs.existsSync(path.join(f.project, '.claude/sheriff/package.json')));
+  assert.ok(fs.existsSync(path.join(f.project, '.agents/skills/sheriff/SKILL.md')));
   put(manifest, original);
   const command = path.join(f.project, '.claude/commands/sheriff/help.md');
   const victim = path.join(f.dir, 'personal.md');
@@ -148,7 +154,7 @@ test('an existing installer lock blocks concurrent mutation without removing its
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Another installer/);
   assert.equal(read(lock), 'another install');
-  assert.deepEqual(fs.readdirSync(f.project), ['.sheriff-installer.lock']);
+  assert.deepEqual(fs.readdirSync(f.project), ['.sheriff-installer.lock', 'node_modules', 'package.json']);
 });
 
 
