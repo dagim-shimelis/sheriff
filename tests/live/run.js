@@ -16,7 +16,9 @@ assert.ok(['codex', 'claude'].includes(host), 'Choose codex or claude');
 const evidence = fs.mkdtempSync(path.join(os.tmpdir(), `sheriff-${host}-live-`));
 const project = path.join(evidence, 'project');
 const skill = path.join(project, host === 'codex' ? '.agents/skills/sheriff' : '.claude/sheriff');
-const cli = path.join(skill, 'bin/sheriff-tools.js');
+const adapters = host === 'codex' ? skill : path.join(project, '.claude');
+const runtimeRoot = path.join(project, 'node_modules/@dagim_codes/sheriff/dist', host);
+const cli = path.join(runtimeRoot, 'bin/sheriff-tools.js');
 const report = { host, startedAt: new Date().toISOString(), evidence, checks: [], sessions: [] };
 const fixedDiscount = 'export function discount(price, percent) { return price * (1 - percent / 100); }\n';
 const brokenDiscount = fixedDiscount.replace('/ 100)', '/ 1000)');
@@ -64,7 +66,7 @@ function suite(name) {
   assert.match(result.stdout, /# tests [1-9]\d*/);
   return result;
 }
-function plan() { return require(path.join(skill, 'bin/lib/phases.js')).parseSubphases(read(path.join(project, '.sheriff/PHASES.md'))); }
+function plan() { return require(path.join(runtimeRoot, 'bin/lib/phases.js')).parseSubphases(read(path.join(project, '.sheriff/PHASES.md'))); }
 function phaseFor(source) { return plan().find(phase => phase.block.includes(`source: ${source}`)); }
 function snapshots(dir) { return Object.fromEntries(files(dir).map(file => [path.relative(dir, file), hash(file)])); }
 
@@ -84,7 +86,7 @@ async function session(name, prompt) {
       '--tools', 'Read,Write,Edit,Bash,Glob,Grep,Skill', '--allowedTools', 'Read,Write,Edit,Bash,Glob,Grep,Skill',
       '--settings', JSON.stringify({ sandbox: { enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false, failIfUnavailable: true } })];
   if (host === 'claude') prompt = prompt.replaceAll('$sheriff ', '/sheriff:');
-  const instruction = `${prompt}\n\nThis is a disposable acceptance-test project. Follow its AGENTS.md. Work only here. No commits, dependency installs, network research, or changes to src/, README.md, package.json, .agents/, .claude/, AGENTS.md, CLAUDE.md, or personal-notes.txt. Use the installed Sheriff integration and actual runner evidence. All preferences are supplied; do not wait for questions. Skip the optional registry update check. Do not delegate.\n`;
+  const instruction = `${prompt}\n\nThis is a disposable acceptance-test project. Follow its AGENTS.md. Work only here. No commits, dependency installs, network research, or changes to src/, README.md, package.json, package-lock.json, node_modules/, .agents/, .claude/, AGENTS.md, CLAUDE.md, or personal-notes.txt. Use the installed Sheriff integration and actual runner evidence. All preferences are supplied; do not wait for questions. Skip the optional registry update check. Do not delegate.\n`;
   write(path.join(evidence, `${name}.prompt.txt`), instruction);
   let timedOut = false;
   let timeout, killTimer, heartbeat;
@@ -121,7 +123,7 @@ async function main() {
   report.hostVersion = ok(run(host, ['--version'])).trim();
   report.node = process.version;
   write(path.join(project, 'package.json'), JSON.stringify({ name: 'sheriff-live-fixture', private: true, type: 'module', scripts: { test: 'node --test tests/*.test.js' } }, null, 2));
-  write(path.join(project, '.gitignore'), '.agents/\n.claude/\n.sheriff/\n');
+  write(path.join(project, '.gitignore'), 'node_modules/\n.agents/\n.claude/\n.sheriff/\n');
   write(path.join(project, 'AGENTS.md'), '# Fixture boundaries\nUse node:test and node:assert/strict. Unit tests only. Existing npm test command works without dependencies. Source behavior is specified in README.md. Sheriff policy: flag source defects, never change source. Work sequentially. Preserve all original tests and personal-notes.txt. Do not commit, install packages, or modify installed skills.\n');
   if (host === 'claude') write(path.join(project, 'CLAUDE.md'), 'Read and follow AGENTS.md for fixture boundaries.\n');
   write(path.join(project, 'README.md'), '# Utility contract\n- add(a, b): arithmetic sum of two numbers.\n- discount(price, percent): final price after a percentage discount; discount(100, 20) must equal 80, discount(50, 100) must equal 0. Inputs are finite prices >= 0 and percentages from 0 to 100.\n- label(text): trim surrounding whitespace, lowercase, and replace each run of whitespace with one hyphen; empty input returns empty string.\n');
@@ -140,24 +142,27 @@ async function main() {
   const initialSources = snapshots(path.join(project, 'src'));
   check('fixture baseline executes a passing test', () => ok(suite('baseline')));
   assert.equal(report.checks.at(-1).pass, true, 'Fix fixture baseline before starting paid model sessions');
-  // npm pack runs prepack. Install the tarball offline through the real npm bin entry.
+  // npm pack runs prepack. Install a real project dependency before registering adapters.
   const npm = process.env.npm_execpath;
   assert.ok(npm, `Run via npm run test:live:${host}`);
   const packed = ok(run(process.execPath, [npm, 'pack', '--json', '--pack-destination', evidence], root));
   const metadata = JSON.parse(packed.slice(packed.indexOf('[\n')))[0];
   report.tarball = { filename: metadata.filename, integrity: metadata.integrity };
-  ok(run(process.execPath, [npm, 'exec', '--offline', '--yes', `--package=${path.join(evidence, metadata.filename)}`, '--', 'sheriff', '--tool', host, '--local', '--silent'], project,
+  ok(run(process.execPath, [npm, 'install', '--offline', '--save-dev', '--ignore-scripts', '--no-audit', '--no-fund', path.join(evidence, metadata.filename)], project,
+    { env: { ...process.env, npm_config_cache: path.join(evidence, 'npm-cache') } }));
+  ok(run(process.execPath, [npm, 'exec', '--offline', '--', 'sheriff', '--tool', host, '--local', '--silent'], project,
     { env: { ...process.env, npm_config_cache: path.join(evidence, 'npm-cache') } }));
   check(`packed npm package installs its ${host} integration`, () => assert.ok(fs.existsSync(path.join(project,
     host === 'codex' ? '.agents/skills/sheriff/SKILL.md' : '.claude/commands/sheriff/help.md'))));
-  const installedFiles = snapshots(skill);
-  report.baseline = { sources: initialSources, installedFiles, personalHash, originalTest, head };
+  const installedFiles = snapshots(adapters);
+  const runtimeFiles = snapshots(runtimeRoot);
+  report.baseline = { sources: initialSources, installedFiles, runtimeFiles, personalHash, originalTest, head };
   save();
 
   const help = await session('01-help', '$sheriff help\nShow the installed Sheriff operations. Do not start work yet.');
   check(`${host} discovers its installed integration and executes help`, () => {
     // Explicit skills are injected by Codex; a separate SKILL.md shell read is not required.
-    assert.match(help, /sheriff\/runtime\.md/);
+    assert.match(help, new RegExp(`dist/${host}/runtime\\.md`));
     if (host === 'codex') assert.match(help, /commands\/help\.md/);
     else assert.match(help, /sheriff:help/);
     assert.match(help, /current-version/);
@@ -240,14 +245,16 @@ async function main() {
     assert.ok(read(path.join(project, 'tests/add.test.js')).includes(originalTest), 'Original test must survive; appending cases is allowed');
     assert.equal(ok(run('git', ['rev-parse', 'HEAD'])), head);
     assert.equal(ok(run('git', ['diff', '--cached', '--name-only'])).trim(), '');
-    assert.deepEqual(snapshots(skill), installedFiles);
+    assert.deepEqual(snapshots(adapters), installedFiles);
+    assert.deepEqual(snapshots(runtimeRoot), runtimeFiles);
   });
   check('uninstall preserves generated tests and project state', () => {
     const tests = snapshots(path.join(project, 'tests'));
     const state = snapshots(path.join(project, '.sheriff'));
-    ok(run(process.execPath, [npm, 'exec', '--offline', '--yes', `--package=${path.join(evidence, metadata.filename)}`, '--', 'sheriff', '--tool', host, '--local', '--uninstall', '--silent'], project,
+    ok(run(process.execPath, [npm, 'exec', '--offline', '--', 'sheriff', '--tool', host, '--local', '--uninstall', '--silent'], project,
       { env: { ...process.env, npm_config_cache: path.join(evidence, 'npm-cache') } }));
     assert.ok(!fs.existsSync(skill));
+    assert.deepEqual(snapshots(runtimeRoot), runtimeFiles);
     assert.deepEqual(snapshots(path.join(project, 'tests')), tests);
     assert.deepEqual(snapshots(path.join(project, '.sheriff')), state);
   });

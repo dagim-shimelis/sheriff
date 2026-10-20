@@ -86,8 +86,11 @@ function err(msg) {
   process.exit(1);
 }
 
-function readStdin() {
-  return fs.readFileSync(process.stdin.fd, 'utf8');
+async function readStdin() {
+  process.stdin.setEncoding('utf8');
+  let content = '';
+  for await (const chunk of process.stdin) content += chunk;
+  return content;
 }
 
 // Guard: commands that require .sheriff/ directory to exist
@@ -98,7 +101,7 @@ const requiresSheriffDir = new Set([
   'git-checkpoint', 'git-commit',
 ]);
 
-try {
+async function main() {
 if (requiresSheriffDir.has(command) && !state.fileExists('.sheriff', cwd)) {
   err('.sheriff/ directory not found. Run init-project first.');
 }
@@ -181,7 +184,7 @@ switch (command) {
   case 'write-handoff': {
     const agentId = args[1];
     if (!agentId) err('write-handoff requires <agentId>');
-    const content = readStdin();
+    const content = await readStdin();
     const file = state.writeHandoff(agentId, content, cwd);
     out({ success: true, file });
     break;
@@ -199,7 +202,7 @@ switch (command) {
   case 'write-result': {
     const subphaseId = args[1];
     if (!subphaseId) err('write-result requires <id>');
-    const content = readStdin();
+    const content = await readStdin();
     const file = results.writeResult(subphaseId, content, cwd);
     out({ success: true, file });
     break;
@@ -224,7 +227,7 @@ switch (command) {
   case 'write-summary': {
     const phaseNum = args[1];
     if (!phaseNum) err('write-summary requires <phaseNum>');
-    const content = readStdin();
+    const content = await readStdin();
     const file = results.writePhaseSummary(phaseNum, content, cwd);
     out({ success: true, file });
     break;
@@ -298,7 +301,7 @@ switch (command) {
   }
 
   case 'write-config': {
-    const content = readStdin();
+    const content = await readStdin();
     let cfg;
     try {
       cfg = JSON.parse(content);
@@ -363,4 +366,6 @@ switch (command) {
     err(`Unknown command: ${command}. Run --help to see usage.`);
 }
 
-} catch (error) { err(error.message); }
+}
+
+main().catch(error => err(error.message));
