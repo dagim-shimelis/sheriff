@@ -21,6 +21,8 @@
     "build:runtime": "node scripts/build-runtime.js",
     "pretest": "npm run build:hooks && npm run build:runtime",
     "test": "node --test tests/*.test.js",
+    "pretest:package-managers": "npm run build:hooks && npm run build:runtime",
+    "test:package-managers": "node --test tests/package-managers/*.test.js",
     "benchmark": "node scripts/benchmark.js",
     "benchmark:report": "node scripts/benchmark-report.js",
     "test:live:codex": "node tests/live/run.js codex",
