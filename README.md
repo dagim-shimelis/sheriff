@@ -86,22 +86,7 @@ A lot can hide between *“it works”* and *“it’s tested.”* Choose the wo
 
 Sheriff guides your AI tool through specialized testing roles, keeping the plan and results in your project.
 
-```mermaid
-flowchart TD
-    accTitle: Sheriff's testing workflow
-    accDescr: Discover gaps, plan work, optionally audit source, write and run tests, and report results.
-    discover["Discover test gaps"] --> plan["Plan by risk"]
-    plan --> audit["Audit (optional)"]
-    audit --> test["Write & run tests"]
-    test --> report["Report results"]
-
-    classDef paper fill:#f4f1e9,stroke:#203c34,color:#203c34
-    classDef forest fill:#203c34,stroke:#203c34,color:#f4f1e9
-    classDef yellow fill:#f4d447,stroke:#203c34,color:#203c34
-    class discover,plan paper
-    class audit,test forest
-    class report yellow
-```
+![Sheriff testing workflow: discover test gaps, plan by risk, optionally audit source, write and run tests, then report results.](https://raw.githubusercontent.com/dagim-shimelis/sheriff/main/docs/images/testing-workflow.png)
 
 Auditing is optional. After source changes, use **Sync** to review the changes and bring affected tests up to date.
 
