@@ -1,4 +1,8 @@
 {
   "includeBranches": ["main"],
-  "autoReview": ["open"]
+  "autoReview": ["open"],
+  "shouldUpdateDescription": false,
+  "statusCommentsEnabled": true,
+  "includeConfidenceScore": true,
+  "statusCheck": true
 }
