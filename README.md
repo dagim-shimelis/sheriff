@@ -86,21 +86,7 @@ A lot can hide between *“it works”* and *“it’s tested.”* Choose the wo
 
 Sheriff guides your AI tool through specialized testing roles, keeping the plan and results in your project.
 
-```text
-Discover test gaps
-        |
-        v
-   Plan by risk
-        |
-        v
- Audit (optional)
-        |
-        v
-Write & run tests
-        |
-        v
-  Report results
-```
+![Sheriff testing workflow: discover test gaps, plan by risk, optionally audit source, write and run tests, then report results.](https://raw.githubusercontent.com/dagim-shimelis/sheriff/main/docs/images/testing-workflow.png)
 
 Auditing is optional. After source changes, use **Sync** to review the changes and bring affected tests up to date.
 
