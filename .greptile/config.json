@@ -1,0 +1,4 @@
+{
+  "includeBranches": ["main"],
+  "autoReview": ["open"]
+}
