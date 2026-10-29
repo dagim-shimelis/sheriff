@@ -111,6 +111,10 @@ For host integration changes, consider `npm run test:live:codex` and/or `npm run
 
 For repository-documentation-only changes, check accuracy against referenced files and run `git diff --check`; the full runtime suite is not necessary unless shipped instructions or behavior also changed.
 
+## Release requests
+
+When a maintainer asks to release a version or continue a release, follow [the agent-assisted release runbook](docs/agent-release.md) and the release policy in `CONTRIBUTING.md`. A release request permits the release PR and post-merge tag/GitHub Release, but never bypasses repository gates or approves the staged npm package on the maintainer's behalf. Inspect current PR/tag/npm state before resuming; pause at human approval gates and verify the published package before declaring completion. This exception to the usual version/commit restriction applies only to an explicit release request.
+
 ## Handoff
 
 Review the full task diff and final status. Summarize what changed and why, list the checks actually run and their outcomes, and disclose unrun checks, blockers, or remaining risks. Never claim verification from a test you did not execute. Leave unrelated work intact and avoid committing generated noise or temporary fixture output.

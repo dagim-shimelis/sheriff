@@ -79,4 +79,6 @@ Merging a PR does not publish a package. A release may contain several merged PR
 4. The [release workflow](.github/workflows/npm-publish.yml) verifies the tag against `package.json` and stages the npm package. The maintainer must inspect and approve the staged package separately.
 5. Verify the published package version and installation before announcing availability.
 
+Maintainers can ask an agent to carry out the repeatable steps using the [agent-assisted release runbook](docs/agent-release.md). PR gates and staged npm approval still require their normal checks and maintainer action.
+
 Never include tokens, credentials, private project content, or sensitive host transcripts in issues, PRs, or release notes.
